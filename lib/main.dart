@@ -2,91 +2,130 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'screens/dashboard_screen.dart';
-import 'screens/live_stream_screen.dart';
-import 'screens/report_screen.dart';
-import 'screens/field_map_screen.dart';
-import 'screens/settings_screen.dart';
+import 'config/supabase_config.dart';
+import 'theme/app_colors.dart';
+import 'providers/realtime_providers.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+
+  // Lock to portrait on mobile.
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    anonKey: SupabaseConfig.anonKey,
   );
-  runApp(const ProviderScope(child: AgriDroneApp()));
+
+  runApp(
+    const ProviderScope(
+      child: AppStartupWidget(),
+    ),
+  );
 }
 
+/// Eagerly boots the Supabase Realtime channel subscription stream before main UI starts.
+class AppStartupWidget extends ConsumerWidget {
+  const AppStartupWidget({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watches the singleton provider to boot and subscribe the channels instantly
+    ref.watch(realtimeServiceProvider);
+
+    return const AgriDroneApp();
+  }
+}
+
+// ── Theme ──────────────────────────────────────────────────────
+
 class AgriDroneTheme {
-  static const Color background = Color(0xFF0A0F0D);
-  static const Color surface = Color(0xFF1A2A1E);
-  static const Color primaryAccent = Color(0xFF4ADE80);
-  static const Color warning = Color(0xFFFB923C);
-  static const Color danger = Color(0xFFF87171);
-  static const Color textPrimary = Color(0xFFE8F5E9);
-  static const Color textSecondary = Color(0xFF86A98E);
-  static final Color borderHighlight = const Color(0xFF4ADE80).withOpacity(0.15);
+  AgriDroneTheme._();
 
   static ThemeData get themeData {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: background,
-      primaryColor: primaryAccent,
-      colorScheme: ColorScheme.dark(
-        primary: primaryAccent,
-        surface: surface,
-        background: background,
-        error: danger,
+      scaffoldBackgroundColor: AppColors.bg,
+      primaryColor: AppColors.green,
+      colorScheme: const ColorScheme.dark(
+        primary: AppColors.green,
+        surface: AppColors.surface,
+        error: AppColors.crit,
         onPrimary: Colors.black,
-        onSurface: textPrimary,
+        onSurface: AppColors.text,
       ),
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.syne(fontWeight: FontWeight.w800, color: textPrimary, fontSize: 36, letterSpacing: -1.0),
-        displayMedium: GoogleFonts.syne(fontWeight: FontWeight.w800, color: textPrimary, fontSize: 28, letterSpacing: -0.5),
-        displaySmall: GoogleFonts.syne(fontWeight: FontWeight.w800, color: textPrimary, fontSize: 22, letterSpacing: -0.5),
-        headlineMedium: GoogleFonts.syne(fontWeight: FontWeight.w700, color: textPrimary, fontSize: 20),
-        headlineSmall: GoogleFonts.syne(fontWeight: FontWeight.w700, color: textPrimary, fontSize: 18),
-        titleLarge: GoogleFonts.syne(fontWeight: FontWeight.w800, color: textPrimary, fontSize: 16, letterSpacing: 0.5),
-        bodyLarge: GoogleFonts.instrumentSans(fontWeight: FontWeight.w500, color: textPrimary, fontSize: 18),
-        bodyMedium: GoogleFonts.instrumentSans(fontWeight: FontWeight.w400, color: textPrimary, fontSize: 16, letterSpacing: 0.2),
-        bodySmall: GoogleFonts.instrumentSans(fontWeight: FontWeight.w400, color: textSecondary, fontSize: 13, letterSpacing: 0.3),
-        labelLarge: GoogleFonts.dmMono(fontWeight: FontWeight.w500, color: textPrimary, fontSize: 18, letterSpacing: 1.0),
-        labelMedium: GoogleFonts.dmMono(fontWeight: FontWeight.w400, color: textPrimary, fontSize: 14, letterSpacing: 0.8),
-        labelSmall: GoogleFonts.dmMono(fontWeight: FontWeight.w500, color: textSecondary, fontSize: 11, letterSpacing: 1.2),
+        displayLarge: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+            fontSize: 32,
+            letterSpacing: -0.5),
+        displayMedium: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+            fontSize: 26,
+            letterSpacing: -0.5),
+        displaySmall: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w700,
+            color: AppColors.text,
+            fontSize: 20,
+            letterSpacing: -0.5),
+        headlineMedium: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w700, color: AppColors.text, fontSize: 18),
+        headlineSmall: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w600, color: AppColors.text, fontSize: 16),
+        titleLarge: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w600,
+            color: AppColors.text,
+            fontSize: 15,
+            letterSpacing: 0.2),
+        bodyLarge: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w500, color: AppColors.text, fontSize: 16),
+        bodyMedium: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w400,
+            color: AppColors.text,
+            fontSize: 14,
+            letterSpacing: 0.1),
+        bodySmall: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w400,
+            color: AppColors.textDim,
+            fontSize: 12,
+            letterSpacing: 0.1),
+        labelLarge: GoogleFonts.jetBrainsMono(
+            fontWeight: FontWeight.w500,
+            color: AppColors.text,
+            fontSize: 15,
+            letterSpacing: 0.5),
+        labelMedium: GoogleFonts.jetBrainsMono(
+            fontWeight: FontWeight.w400,
+            color: AppColors.text,
+            fontSize: 13,
+            letterSpacing: 0.5),
+        labelSmall: GoogleFonts.jetBrainsMono(
+            fontWeight: FontWeight.w500,
+            color: AppColors.textDim,
+            fontSize: 10,
+            letterSpacing: 0.5),
       ),
-      appBarTheme: AppBarTheme(
-        backgroundColor: background,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.text,
         elevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.syne(
-          fontWeight: FontWeight.w800,
-          fontSize: 20,
-          color: textPrimary,
-        ),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: surface,
-        indicatorColor: primaryAccent.withOpacity(0.2),
-        labelTextStyle: MaterialStateProperty.all(
-          GoogleFonts.instrumentSans(
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
-            color: textPrimary,
-          ),
-        ),
-        iconTheme: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
-            return const IconThemeData(color: primaryAccent);
-          }
-          return const IconThemeData(color: textSecondary);
-        }),
+        iconTheme: IconThemeData(color: AppColors.text),
       ),
     );
   }
 }
+
+// ── App Entry ──────────────────────────────────────────────────
 
 class AgriDroneApp extends StatelessWidget {
   const AgriDroneApp({super.key});
@@ -97,104 +136,7 @@ class AgriDroneApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'AgriDrone Guardian',
       theme: AgriDroneTheme.themeData,
-      home: const AppShell(),
-    );
-  }
-}
-
-class AppShell extends StatefulWidget {
-  const AppShell({super.key});
-
-  @override
-  State<AppShell> createState() => _AppShellState();
-}
-
-class _AppShellState extends State<AppShell> {
-  int _currentIndex = 0;
-
-  final List<Widget> _screens = const [
-    DashboardScreen(),
-    LiveStreamScreen(),
-    ReportScreen(),
-    FieldMapScreen(),
-    SettingsScreen(),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: _screens[_currentIndex],
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF0D1A10),
-          border: Border(
-            top: BorderSide(
-              color: const Color(0xFF4ADE80).withOpacity(0.15),
-              width: 1.0,
-            )
-          )
-        ),
-        child: Theme(
-          data: Theme.of(context).copyWith(
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            backgroundColor: Colors.transparent,
-            type: BottomNavigationBarType.fixed,
-            elevation: 0,
-            showSelectedLabels: true,
-            showUnselectedLabels: true,
-            selectedItemColor: const Color(0xFF4ADE80),
-            unselectedItemColor: const Color(0xFF4A6B51),
-            selectedLabelStyle: Theme.of(context).textTheme.labelSmall?.copyWith(color: const Color(0xFF4ADE80), fontWeight: FontWeight.bold),
-            unselectedLabelStyle: Theme.of(context).textTheme.labelSmall?.copyWith(color: const Color(0xFF4A6B51)),
-            items: [
-              _buildBottomNavItem(0, Icons.dashboard_outlined, Icons.dashboard, 'Dashboard'),
-              _buildBottomNavItem(1, Icons.videocam_outlined, Icons.videocam, 'Live'),
-              _buildBottomNavItem(2, Icons.analytics_outlined, Icons.analytics, 'Report'),
-              _buildBottomNavItem(3, Icons.map_outlined, Icons.map, 'Map'),
-              _buildBottomNavItem(4, Icons.settings_outlined, Icons.settings, 'Settings'),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  BottomNavigationBarItem _buildBottomNavItem(int index, IconData outline, IconData filled, String label) {
-    final isActive = _currentIndex == index;
-    final color = isActive ? const Color(0xFF4ADE80) : const Color(0xFF4A6B51);
-    
-    return BottomNavigationBarItem(
-      icon: Padding(
-        padding: const EdgeInsets.only(bottom: 4.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(isActive ? filled : outline, color: color),
-            if (isActive)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                width: 4,
-                height: 4,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4ADE80),
-                  shape: BoxShape.circle,
-                ),
-              )
-            else 
-              const SizedBox(height: 8) // match height to prevent jumping
-          ],
-        ),
-      ),
-      label: label,
+      home: const SplashScreen(),
     );
   }
 }

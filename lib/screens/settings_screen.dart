@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../providers/app_providers.dart';
-import '../models/drone_models.dart';
-import '../widgets/glass_card.dart';
-import '../widgets/pulsing_dot.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/supabase_config.dart';
+import '../theme/app_colors.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/status_dot.dart';
+import '../providers/dashboard_providers.dart';
+import '../providers/flight_providers.dart';
+import '../providers/realtime_providers.dart';
+import '../services/realtime_service.dart';
+import 'login_screen.dart';
+
+/// Settings and Diagnostic Console Screen displaying connection diagnostics, health checks, and metadata.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -15,448 +22,407 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _ipController =
-      TextEditingController(text: '192.168.1.76');
+  bool _testingSupabase = false;
+  bool _testingFastApi = false;
 
-  static const _crops = [
-    {'label': 'Rice', 'icon': Icons.grass},
-    {'label': 'Wheat', 'icon': Icons.landscape},
-    {'label': 'Maize', 'icon': Icons.eco},
-    {'label': 'Tomato', 'icon': Icons.circle},
-    {'label': 'Potato', 'icon': Icons.spa},
-  ];
+  void _handleLogout() {
+    ref.read(authStateProvider.notifier).logout();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
 
-  @override
-  void dispose() {
-    _ipController.dispose();
-    super.dispose();
+  Future<void> _testSupabase() async {
+    setState(() => _testingSupabase = true);
+    try {
+      await Supabase.instance.client
+          .from('flight_captures')
+          .select('id')
+          .limit(1);
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text('SUPABASE OK', style: GoogleFonts.spaceGrotesk(color: AppColors.green, fontWeight: FontWeight.bold)),
+            content: Text(
+              'Successfully verified query against Supabase database. Captures check complete.',
+              style: GoogleFonts.spaceGrotesk(color: AppColors.text),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('CLOSE', style: GoogleFonts.spaceGrotesk(color: AppColors.green)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text('SUPABASE ERROR', style: GoogleFonts.spaceGrotesk(color: AppColors.crit, fontWeight: FontWeight.bold)),
+            content: Text('Database verification query failed: $e', style: GoogleFonts.spaceGrotesk(color: AppColors.text)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('CLOSE', style: GoogleFonts.spaceGrotesk(color: AppColors.crit)),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _testingSupabase = false);
+    }
+  }
+
+  Future<void> _testFastApi() async {
+    setState(() => _testingFastApi = true);
+    try {
+      final health = await ref.read(huggingFaceServiceProvider).health();
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text('FASTAPI OK', style: GoogleFonts.spaceGrotesk(color: AppColors.green, fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: health.entries.map((e) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6.0),
+                  child: Text(
+                    '${e.key}: ${e.value}',
+                    style: GoogleFonts.jetBrainsMono(color: AppColors.text, fontSize: 13.0),
+                  ),
+                );
+              }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('CLOSE', style: GoogleFonts.spaceGrotesk(color: AppColors.green)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text('FASTAPI ERROR', style: GoogleFonts.spaceGrotesk(color: AppColors.crit, fontWeight: FontWeight.bold)),
+            content: Text('Inference space check failed: $e', style: GoogleFonts.spaceGrotesk(color: AppColors.text)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('CLOSE', style: GoogleFonts.spaceGrotesk(color: AppColors.crit)),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _testingFastApi = false);
+    }
+  }
+
+  Future<void> _resubscribeRealtime() async {
+    try {
+      await ref.read(realtimeServiceProvider).reconnect();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Curation Realtime channel re-initialized successfully'),
+            backgroundColor: AppColors.greenDeep,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Re-subscribe failed: $e'),
+            backgroundColor: AppColors.crit,
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final configAsync = ref.watch(configProvider);
-    final statusAsync = ref.watch(droneStatusProvider);
+    final auth = ref.watch(authStateProvider);
+    final connStateAsync = ref.watch(realtimeConnectionProvider);
 
-    final config = configAsync.value ?? AppConfig();
-    final isOnline = statusAsync.value?.status.toLowerCase() == 'online';
+    Color connectionColor = AppColors.crit;
+    connStateAsync.whenData((state) {
+      if (state == RealtimeConnectionState.connected) {
+        connectionColor = AppColors.green;
+      } else if (state == RealtimeConnectionState.connecting) {
+        connectionColor = AppColors.warn;
+      }
+    });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0F0D),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0F0D),
-        elevation: 0,
-        title: Text('Settings',
-            style: GoogleFonts.syne(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-                color: const Color(0xFFE8F5E9))),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 60),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Connection Status
-            _sectionLabel('CONNECTION'),
-            const SizedBox(height: 10),
-            GlassCard(
-              child: Column(
-                children: [
-                  _connectionRow(
-                    icon: Icons.cloud_queue_rounded,
-                    label: 'Firebase RTDB',
-                    status: isOnline ? 'CONNECTED' : 'DISCONNECTED',
-                    ok: isOnline,
-                    subtitle: 'agridrone-guardian.asia-southeast1',
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(height: 1, color: Colors.white.withOpacity(0.06)),
-                  const SizedBox(height: 16),
-                  _connectionRow(
-                    icon: Icons.api_rounded,
-                    label: 'Inference API',
-                    status: 'RENDER',
-                    ok: true,
-                    subtitle: 'agridrone-api.onrender.com',
-                    trailingWidget: IconButton(
-                      icon: const Icon(Icons.copy_rounded, size: 16,
-                          color: Color(0xFF4A6B51)),
-                      onPressed: () {
-                        Clipboard.setData(const ClipboardData(
-                            text: 'https://agridrone-api.onrender.com'));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Copied!',
-                                style: GoogleFonts.instrumentSans()),
-                            backgroundColor: const Color(0xFF1A2A1E),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(height: 1, color: Colors.white.withOpacity(0.06)),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF38BDF8).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.router_rounded,
-                            color: Color(0xFF38BDF8), size: 18),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _ipController,
-                          style: GoogleFonts.dmMono(
-                              fontSize: 13,
-                              color: const Color(0xFFE8F5E9)),
-                          decoration: InputDecoration(
-                            labelText: 'Drone IP Address',
-                            labelStyle: GoogleFonts.instrumentSans(
-                                fontSize: 12,
-                                color: const Color(0xFF4A6B51)),
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          // Update drone IP via Firebase
-                          updateConfig('ip', _ipController.text.trim());
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF4ADE80).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: const Color(0xFF4ADE80).withOpacity(0.3)),
-                          ),
-                          child: Text('CONNECT',
-                              style: GoogleFonts.dmMono(
-                                  fontSize: 10,
-                                  letterSpacing: 1,
-                                  color: const Color(0xFF4ADE80))),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Text(
+                'SYSTEM SETUP & METRICS',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.text,
+                  fontSize: 20.0,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.0,
+                ),
               ),
-            ),
-            const SizedBox(height: 28),
+              const SizedBox(height: 16.0),
 
-            // Hardware Config
-            _sectionLabel('HARDWARE CONFIG'),
-            const SizedBox(height: 10),
-            GlassCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              // Operator Profile
+              GlassCard(
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppColors.green.withAlpha((255 * 0.1).toInt()),
+                      child: const Icon(Icons.person, color: AppColors.green, size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Curation Drone Operator',
+                          style: GoogleFonts.spaceGrotesk(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.text),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          auth.email ?? 'operator@agridrone.io',
+                          style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.textDim),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Realtime Status bar
+              GlassCard(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'REALTIME METRIC SYNC STATUS',
+                      style: GoogleFonts.spaceGrotesk(color: AppColors.textDim, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    Row(
+                      children: [
+                        StatusDot(color: connectionColor, size: 8.0),
+                        const SizedBox(width: 8.0),
+                        Text(
+                          connStateAsync.maybeWhen(
+                            data: (state) => state.name.toUpperCase(),
+                            orElse: () => 'CONNECTING',
+                          ),
+                          style: GoogleFonts.jetBrainsMono(color: connectionColor, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Text(
+                'SUPABASE INSTANCE SETTINGS',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textFaint,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // API Fields
+              GlassCard(
+                child: Column(
+                  children: [
+                    _buildApiField('DATABASE REFERENCE URL', SupabaseConfig.url),
+                    const Divider(color: AppColors.line, height: 24.0),
+                    _buildApiField('ANON PUBLIC KEY ID', '${SupabaseConfig.anonKey.substring(0, 24)}••••••••'),
+                    const Divider(color: AppColors.line, height: 24.0),
+                    _buildApiField('STORAGE BUCKET TARGET', SupabaseConfig.storageBucket),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Text(
+                'FASTAPI MODEL SPACE SETTINGS',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textFaint,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              GlassCard(
+                child: Column(
+                  children: [
+                    _buildApiField('INFERENCE PREDICT ENDPOINT', SupabaseConfig.huggingFacePredictUrl),
+                    const Divider(color: AppColors.line, height: 24.0),
+                    _buildApiField('HEALTH DIAGNOSTICS ENDPOINT', SupabaseConfig.huggingFaceHealthUrl),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Diagnostic Actions Grid
+              Text(
+                'CURATION ACTIONS & DIAGNOSTICS',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textFaint,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              Row(
                 children: [
-                  Text('CROP TYPE',
-                      style: GoogleFonts.dmMono(
-                          fontSize: 10,
-                          letterSpacing: 2,
-                          color: const Color(0xFF4A6B51))),
-                  const SizedBox(height: 12),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _crops.map((c) {
-                        final label = c['label'] as String;
-                        final icon = c['icon'] as IconData;
-                        final selected = config.crop == label;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: GestureDetector(
-                            onTap: () => updateConfig('crop', label),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: selected
-                                    ? const Color(0xFF4ADE80).withOpacity(0.12)
-                                    : Colors.white.withOpacity(0.04),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: selected
-                                      ? const Color(0xFF4ADE80).withOpacity(0.5)
-                                      : Colors.white.withOpacity(0.08),
-                                ),
-                              ),
-                              child: Row(children: [
-                                Icon(icon,
-                                    size: 15,
-                                    color: selected
-                                        ? const Color(0xFF4ADE80)
-                                        : const Color(0xFF4A6B51)),
-                                const SizedBox(width: 6),
-                                Text(label,
-                                    style: GoogleFonts.instrumentSans(
-                                        fontSize: 13,
-                                        fontWeight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                        color: selected
-                                            ? const Color(0xFFE8F5E9)
-                                            : const Color(0xFF86A98E))),
-                              ]),
+                  Expanded(
+                    child: _testingSupabase
+                        ? const Center(child: CircularProgressIndicator(color: AppColors.green))
+                        : OutlinedButton(
+                            onPressed: _testSupabase,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.green,
+                              side: const BorderSide(color: AppColors.lineBright),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                              padding: const EdgeInsets.symmetric(vertical: 12.0),
+                            ),
+                            child: Text(
+                              'TEST SUPABASE',
+                              style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0),
                             ),
                           ),
-                        );
-                      }).toList(),
-                    ),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Scan interval slider
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('SCAN INTERVAL',
-                          style: GoogleFonts.dmMono(
-                              fontSize: 10,
-                              letterSpacing: 2,
-                              color: const Color(0xFF4A6B51))),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4ADE80).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: const Color(0xFF4ADE80).withOpacity(0.2)),
-                        ),
-                        child: Text('${config.scanInterval}s',
-                            style: GoogleFonts.dmMono(
-                                fontSize: 13,
-                                color: const Color(0xFF4ADE80))),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: const Color(0xFF4ADE80),
-                      inactiveTrackColor:
-                          const Color(0xFF4ADE80).withOpacity(0.1),
-                      thumbColor: const Color(0xFF4ADE80),
-                      overlayColor:
-                          const Color(0xFF4ADE80).withOpacity(0.15),
-                      trackHeight: 3,
-                    ),
-                    child: Slider(
-                      value: config.scanInterval.toDouble().clamp(10, 300),
-                      min: 10,
-                      max: 300,
-                      divisions: 29,
-                      onChanged: (_) {},
-                      onChangeEnd: (v) =>
-                          updateConfig('scan_interval', v.toInt()),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Confidence threshold slider
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('CONFIDENCE THRESHOLD',
-                          style: GoogleFonts.dmMono(
-                              fontSize: 10,
-                              letterSpacing: 2,
-                              color: const Color(0xFF4A6B51))),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4ADE80).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: const Color(0xFF4ADE80).withOpacity(0.2)),
-                        ),
-                        child: Text(
-                            '${(config.confidence * 100).toStringAsFixed(0)}%',
-                            style: GoogleFonts.dmMono(
-                                fontSize: 13,
-                                color: const Color(0xFF4ADE80))),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: const Color(0xFF4ADE80),
-                      inactiveTrackColor:
-                          const Color(0xFF4ADE80).withOpacity(0.1),
-                      thumbColor: const Color(0xFF4ADE80),
-                      overlayColor:
-                          const Color(0xFF4ADE80).withOpacity(0.15),
-                      trackHeight: 3,
-                    ),
-                    child: Slider(
-                      value: config.confidence.clamp(0.1, 0.9),
-                      min: 0.1,
-                      max: 0.9,
-                      divisions: 8,
-                      onChanged: (_) {},
-                      onChangeEnd: (v) => updateConfig('confidence', v),
-                    ),
+                  const SizedBox(width: 12.0),
+                  Expanded(
+                    child: _testingFastApi
+                        ? const Center(child: CircularProgressIndicator(color: AppColors.green))
+                        : OutlinedButton(
+                            onPressed: _testFastApi,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.green,
+                              side: const BorderSide(color: AppColors.lineBright),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                              padding: const EdgeInsets.symmetric(vertical: 12.0),
+                            ),
+                            child: Text(
+                              'TEST FASTAPI',
+                              style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0),
+                            ),
+                          ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 28),
+              const SizedBox(height: 12.0),
 
-            // About
-            _sectionLabel('ABOUT'),
-            const SizedBox(height: 10),
-            GlassCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4ADE80).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: const Color(0xFF4ADE80).withOpacity(0.2)),
-                        ),
-                        child: const Icon(Icons.hexagon_outlined,
-                            color: Color(0xFF4ADE80), size: 24),
-                      ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('AgriDrone Guardian',
-                              style: GoogleFonts.syne(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFFE8F5E9))),
-                          Text('Version 2.0.0 · Build 2404A',
-                              style: GoogleFonts.dmMono(
-                                  fontSize: 11,
-                                  color: const Color(0xFF4A6B51))),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Divider(height: 1, color: Colors.white.withOpacity(0.06)),
-                  const SizedBox(height: 16),
-                  _aboutRow('Module', 'CC4003NI · Agricultural Tech'),
-                  _aboutRow('Institution', 'Islington College'),
-                  _aboutRow('Validated by', 'London Metropolitan University'),
-                  _aboutRow('Firebase Project', 'agridrone-guardian'),
-                  _aboutRow('Inference Engine',
-                      'YOLOv8 · FastAPI · Render.com'),
-                ],
+              ElevatedButton.icon(
+                onPressed: _resubscribeRealtime,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.green.withAlpha((255 * 0.1).toInt()),
+                  foregroundColor: AppColors.green,
+                  side: const BorderSide(color: AppColors.lineBright),
+                  minimumSize: const Size.fromHeight(44.0),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                ),
+                icon: const Icon(Icons.sync_problem, size: 16.0),
+                label: Text(
+                  'RE-SUBSCRIBE TO REALTIME',
+                  style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0),
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              const SizedBox(height: 32.0),
 
-  Widget _connectionRow({
-    required IconData icon,
-    required String label,
-    required String status,
-    required bool ok,
-    required String subtitle,
-    Widget? trailingWidget,
-  }) {
-    final color = ok ? const Color(0xFF4ADE80) : const Color(0xFFF87171);
-    return Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: GoogleFonts.instrumentSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFFE8F5E9))),
-              Text(subtitle,
-                  style: GoogleFonts.dmMono(
-                      fontSize: 10, color: const Color(0xFF4A6B51))),
+              // Academic About Block
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'AgriDrone Guardian v2.4.0',
+                      style: GoogleFonts.spaceGrotesk(color: AppColors.textDim, fontSize: 12.0, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'IoT + AI Curated Dashboard · CC4003NI',
+                      style: GoogleFonts.spaceGrotesk(color: AppColors.textFaint, fontSize: 11.0),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24.0),
+
+              // Logout Button
+              OutlinedButton.icon(
+                onPressed: _handleLogout,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.crit),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.logout_rounded, color: AppColors.crit, size: 18),
+                label: Text(
+                  'SIGN OUT OPERATOR ACCOUNT',
+                  style: GoogleFonts.spaceGrotesk(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.crit),
+                ),
+              ),
             ],
           ),
         ),
-        if (trailingWidget != null) trailingWidget,
-        Row(
-          children: [
-            if (ok)
-              PulsingDot(color: color, size: 6)
-            else
-              Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                      color: color, shape: BoxShape.circle)),
-            const SizedBox(width: 6),
-            Text(status,
-                style: GoogleFonts.dmMono(
-                    fontSize: 10, letterSpacing: 1, color: color)),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _aboutRow(String key, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
+  Widget _buildApiField(String label, String value) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(key,
-                style: GoogleFonts.instrumentSans(
-                    fontSize: 12, color: const Color(0xFF4A6B51))),
+          Text(
+            label,
+            style: GoogleFonts.spaceGrotesk(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textFaint),
           ),
-          Expanded(
-            child: Text(value,
-                style: GoogleFonts.instrumentSans(
-                    fontSize: 12, color: const Color(0xFF86A98E))),
+          const SizedBox(height: 4),
+          SelectableText(
+            value,
+            style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppColors.text, fontWeight: FontWeight.w600),
           ),
         ],
       ),
     );
   }
-
-  Widget _sectionLabel(String t) => Text(t,
-      style: GoogleFonts.dmMono(
-          fontSize: 10,
-          letterSpacing: 2.5,
-          fontWeight: FontWeight.w500,
-          color: const Color(0xFF4A6B51)));
 }

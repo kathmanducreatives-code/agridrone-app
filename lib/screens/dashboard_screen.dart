@@ -1,517 +1,310 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
-import 'package:firebase_database/firebase_database.dart';
-import '../models/drone_models.dart';
-import '../providers/app_providers.dart';
-import '../widgets/glass_card.dart';
-import '../widgets/pulsing_dot.dart';
-import '../widgets/animated_scan_button.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-class DashboardScreen extends ConsumerStatefulWidget {
+import '../theme/app_colors.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/status_dot.dart';
+import '../models/detection.dart';
+import '../providers/dashboard_providers.dart';
+import '../providers/flight_providers.dart';
+import '../providers/realtime_providers.dart';
+import '../services/realtime_service.dart';
+
+/// Curation dashboard showing real-time statistics, weekly progress, and active mission profiles.
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
-  @override
-  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
-}
-
-class _DashboardScreenState extends ConsumerState<DashboardScreen>
-    with TickerProviderStateMixin {
-  late final AnimationController _staggerCtrl;
-  bool _scanning = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _staggerCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..forward();
+  String _formatFlightTime(int? ms) {
+    if (ms == null) return '—';
+    if (ms > 100000000000) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
+    } else {
+      final secs = ms ~/ 1000;
+      final mins = secs ~/ 60;
+      final remainingSecs = secs % 60;
+      return '${mins}m ${remainingSecs}s';
+    }
   }
 
   @override
-  void dispose() {
-    _staggerCtrl.dispose();
-    super.dispose();
-  }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connStateAsync = ref.watch(realtimeConnectionProvider);
+    final latestFlightAsync = ref.watch(latestFlightSummaryProvider);
+    final pendingCountAsync = ref.watch(pendingReviewCountProvider);
+    final analyzedCountAsync = ref.watch(analyzedTodayCountProvider);
+    final todayDetectionsAsync = ref.watch(todayDetectionsCountProvider);
+    final alertLevelAsync = ref.watch(diseaseAlertLevelProvider);
+    final recentDetectionsAsync = ref.watch(recentDetectionsProvider);
+    final chartDataAsync = ref.watch(dailyChartDataProvider);
 
-  Animation<double> _stagger(int index) {
-    final start = index * 0.15;
-    final end = (start + 0.5).clamp(0.0, 1.0);
-    return CurvedAnimation(
-      parent: _staggerCtrl,
-      curve: Interval(start, end, curve: Curves.easeOut),
-    );
-  }
-
-  IconData _signalIcon(int rssi) {
-    if (rssi >= -60) return Icons.signal_wifi_4_bar;
-    if (rssi >= -70) return Icons.network_wifi_3_bar;
-    if (rssi >= -80) return Icons.network_wifi_2_bar;
-    return Icons.network_wifi_1_bar;
-  }
-
-  Color _signalColor(int rssi) {
-    if (rssi >= -60) return const Color(0xFF4ADE80);
-    if (rssi >= -70) return const Color(0xFF86EFAC);
-    if (rssi >= -80) return const Color(0xFFFB923C);
-    return const Color(0xFFF87171);
-  }
-
-  String _lastSeenText(int ms) {
-    if (ms == 0) return 'never';
-    final diff = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(ms));
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-    return '${diff.inHours}h ago';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final statusAsync = ref.watch(droneStatusProvider);
-    final latestAsync = ref.watch(latestDetectionProvider);
-    final soilAsync = ref.watch(soilDataProvider);
-
-    final status = statusAsync.value ?? DroneStatus();
-    final isOnline = status.status.toLowerCase() == 'online';
-    final isScanning = _scanning || status.status.toLowerCase() == 'scanning';
+    Color connectionColor = AppColors.crit;
+    connStateAsync.whenData((state) {
+      if (state == RealtimeConnectionState.connected) {
+        connectionColor = AppColors.green;
+      } else if (state == RealtimeConnectionState.connecting) {
+        connectionColor = AppColors.warn;
+      }
+    });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0F0D),
-      appBar: _buildAppBar(context, status, isOnline),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _sectionLabel('DRONE TELEMETRY'),
-            const SizedBox(height: 10),
-            FadeTransition(
-              opacity: _stagger(0),
-              child: SlideTransition(
-                position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
-                    .animate(_stagger(0)),
-                child: _buildDroneCard(context, status, isOnline),
-              ),
-            ),
-            const SizedBox(height: 28),
-            _sectionLabel('LATEST DETECTION'),
-            const SizedBox(height: 10),
-            FadeTransition(
-              opacity: _stagger(1),
-              child: SlideTransition(
-                position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
-                    .animate(_stagger(1)),
-                child: latestAsync.when(
-                  data: (d) => _buildDetectionCard(context, d),
-                  loading: () => _shimmer(height: 160),
-                  error: (_, __) => _buildDetectionEmpty(context),
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            _sectionLabel('ENVIRONMENT'),
-            const SizedBox(height: 10),
-            FadeTransition(
-              opacity: _stagger(2),
-              child: SlideTransition(
-                position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
-                    .animate(_stagger(2)),
-                child: soilAsync.when(
-                  data: (s) => _buildSoilRow(context, s),
-                  loading: () => Row(children: [
-                    Expanded(child: _shimmer(height: 130)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _shimmer(height: 130)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _shimmer(height: 130)),
-                  ]),
-                  error: (_, __) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: AnimatedScanButton(
-          isScanning: isScanning,
-          onPressed: () async {
-            setState(() => _scanning = true);
-            await FirebaseDatabase.instance.ref('drone/command').set('scan');
-            await Future.delayed(const Duration(seconds: 5));
-            if (mounted) setState(() => _scanning = false);
-          },
-        ),
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(
-      BuildContext context, DroneStatus status, bool isOnline) {
-    return AppBar(
-      backgroundColor: const Color(0xFF0A0F0D),
-      elevation: 0,
-      titleSpacing: 16,
-      title: Row(
-        children: [
-          const Icon(Icons.hexagon_outlined,
-              color: Color(0xFF4ADE80), size: 26),
-          const SizedBox(width: 10),
-          Text('AgriDrone',
-              style: GoogleFonts.syne(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  color: const Color(0xFFE8F5E9))),
-        ],
-      ),
-      actions: [
-        _pill(
-          icon: Icons.battery_full_rounded,
-          label: '${status.battery}%',
-          iconColor: const Color(0xFF4ADE80),
-        ),
-        const SizedBox(width: 6),
-        _connectedPill(isOnline),
-        const SizedBox(width: 6),
-        _pill(
-          icon: Icons.flight_takeoff_rounded,
-          label: status.isFlying ? 'FLYING' : 'GROUNDED',
-          iconColor:
-              status.isFlying ? const Color(0xFF38BDF8) : const Color(0xFF4A6B51),
-        ),
-        const SizedBox(width: 14),
-      ],
-    );
-  }
-
-  Widget _pill({required IconData icon, required String label, required Color iconColor}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A2A1E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: iconColor),
-          const SizedBox(width: 5),
-          Text(label,
-              style: GoogleFonts.dmMono(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFFE8F5E9),
-                  letterSpacing: 0.5)),
-        ],
-      ),
-    );
-  }
-
-  Widget _connectedPill(bool isOnline) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A2A1E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isOnline)
-            const PulsingDot(color: Color(0xFF4ADE80), size: 8)
-          else
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Color(0xFFF87171),
-                shape: BoxShape.circle,
-              ),
-            ),
-          const SizedBox(width: 6),
-          Text(isOnline ? 'ONLINE' : 'OFFLINE',
-              style: GoogleFonts.dmMono(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: isOnline
-                    ? const Color(0xFF4ADE80)
-                    : const Color(0xFFF87171),
-                letterSpacing: 0.5,
-              )),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDroneCard(
-      BuildContext context, DroneStatus status, bool isOnline) {
-    final signalColor = _signalColor(status.rssi);
-    return GlassCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('IP ADDRESS',
-                        style: GoogleFonts.dmMono(
-                            fontSize: 9,
-                            letterSpacing: 2,
-                            color: const Color(0xFF4A6B51))),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(status.ip,
-                          style: GoogleFonts.dmMono(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFFE8F5E9),
-                              letterSpacing: 1)),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              // 1. Top Bar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(6),
-                      border:
-                          Border.all(color: Colors.white.withOpacity(0.1)),
+                  Text(
+                    'AGRIDRONE GUARDIAN',
+                    style: GoogleFonts.spaceGrotesk(
+                      color: AppColors.text,
+                      fontSize: 20.0,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
                     ),
-                    child: Text(status.camera,
-                        style: GoogleFonts.dmMono(
-                            fontSize: 10,
-                            color: const Color(0xFF86A98E))),
                   ),
-                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      Text('${status.rssi} dBm',
-                          style: GoogleFonts.dmMono(
-                              fontSize: 11, color: signalColor)),
-                      const SizedBox(width: 6),
-                      Icon(_signalIcon(status.rssi),
-                          color: signalColor, size: 22),
+                      StatusDot(color: connectionColor, size: 8.0),
+                      const SizedBox(width: 8.0),
+                      Text(
+                        connStateAsync.maybeWhen(
+                          data: (state) => state.name.toUpperCase(),
+                          orElse: () => 'CONNECTING',
+                        ),
+                        style: GoogleFonts.jetBrainsMono(
+                          color: connectionColor,
+                          fontSize: 11.0,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ],
                   ),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(height: 1, color: Colors.white.withOpacity(0.06)),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const Icon(Icons.schedule_rounded,
-                  size: 14, color: Color(0xFF86A98E)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text('Last seen ${_lastSeenText(status.lastSeen)}',
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.instrumentSans(
-                        fontSize: 13, color: const Color(0xFF86A98E))),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isOnline
-                      ? const Color(0xFF4ADE80).withOpacity(0.12)
-                      : const Color(0xFFF87171).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isOnline
-                        ? const Color(0xFF4ADE80).withOpacity(0.4)
-                        : const Color(0xFFF87171).withOpacity(0.4),
+              const SizedBox(height: 24.0),
+
+              // 2. Latest Flight Hero Card
+              latestFlightAsync.when(
+                data: (summary) {
+                  if (summary == null) {
+                    return const GlassCard(
+                      child: Center(
+                        child: Text(
+                          'No flights found in database',
+                          style: TextStyle(color: AppColors.textDim, fontFamily: 'Space Grotesk'),
+                        ),
+                      ),
+                    );
+                  }
+
+                  final bool fullyProcessed = summary.pendingReview == 0 && summary.fullyProcessed;
+
+                  return GlassCard(
+                    bright: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'LATEST FLIGHT PROFILE',
+                                  style: GoogleFonts.spaceGrotesk(
+                                    color: AppColors.textDim,
+                                    fontSize: 11.0,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 4.0),
+                                Text(
+                                  'FLT_${summary.flightId.toString().padLeft(4, '0')}',
+                                  style: GoogleFonts.syne(
+                                    color: AppColors.green,
+                                    fontSize: 28.0,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+                              decoration: BoxDecoration(
+                                color: fullyProcessed
+                                    ? AppColors.green.withAlpha((255 * 0.1).toInt())
+                                    : AppColors.warn.withAlpha((255 * 0.1).toInt()),
+                                borderRadius: BorderRadius.circular(6.0),
+                                border: Border.all(
+                                  color: fullyProcessed ? AppColors.green : AppColors.warn,
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    fullyProcessed ? Icons.check_circle_outline : Icons.pending_actions_outlined,
+                                    size: 14.0,
+                                    color: fullyProcessed ? AppColors.green : AppColors.warn,
+                                  ),
+                                  const SizedBox(width: 6.0),
+                                  Text(
+                                    fullyProcessed ? 'COMPLETED' : 'CURATION QUEUE',
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: fullyProcessed ? AppColors.green : AppColors.warn,
+                                      fontSize: 10.0,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20.0),
+                        
+                        // Detailed Curation Counts
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildHeroStat('TOTAL CAPTURES', summary.imageCount.toString()),
+                            _buildHeroStat('PENDING REVIEW', summary.pendingReview.toString(), highlight: summary.pendingReview > 0),
+                            _buildHeroStat('ANALYZED', summary.analyzedCount.toString()),
+                            _buildHeroStat('REJECTED', summary.rejectedCount.toString()),
+                          ],
+                        ),
+                        
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16.0),
+                          child: Divider(color: AppColors.line, height: 1.0),
+                        ),
+                        
+                        // Telemetry details
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'AVG MOISTURE: ${summary.avgMoisturePct != null ? '${summary.avgMoisturePct!.toStringAsFixed(1)}%' : '—'}',
+                              style: GoogleFonts.jetBrainsMono(color: AppColors.textDim, fontSize: 11.0),
+                            ),
+                            Text(
+                              'SPAN: ${_formatFlightTime(summary.startedAtMs)} ↔ ${_formatFlightTime(summary.endedAtMs)}',
+                              style: GoogleFonts.jetBrainsMono(color: AppColors.textFaint, fontSize: 11.0),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                loading: () => const GlassCard(
+                  child: SizedBox(
+                    height: 120,
+                    child: Center(child: CircularProgressIndicator(color: AppColors.green)),
                   ),
                 ),
-                child: Text(
-                  status.status.toUpperCase(),
-                  style: GoogleFonts.dmMono(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: isOnline
-                        ? const Color(0xFF4ADE80)
-                        : const Color(0xFFF87171),
-                    letterSpacing: 1,
+                error: (err, stack) => GlassCard(
+                  child: Center(
+                    child: Text('Failed to load latest flight aggregates: $err', style: const TextStyle(color: AppColors.crit)),
                   ),
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+              const SizedBox(height: 24.0),
 
-  Widget _buildDetectionCard(BuildContext context, Detection d) {
-    final formattedDisease = d.disease.replaceAll('_', ' ');
-    final isUnknown =
-        d.disease == 'Unknown' || d.confidence == 0 || d.disease.isEmpty;
-    final isHealthy = d.disease.toLowerCase() == 'healthy';
-    final conf = d.confidence;
-    Color sev = const Color(0xFF4ADE80);
-    if (conf < 0.4) sev = const Color(0xFFF87171);
-    else if (conf < 0.7) sev = const Color(0xFFFB923C);
+              // 3. Four KPI Tiles (2x2 Grid)
+              _buildKpiGrid(ref, pendingCountAsync, analyzedCountAsync, todayDetectionsAsync, alertLevelAsync),
+              const SizedBox(height: 24.0),
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1A2A1E), Color(0xFF111A14)],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: const Color(0xFF4ADE80).withOpacity(0.12)),
-          boxShadow: [
-            BoxShadow(
-                color: sev.withOpacity(0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 8)),
-          ],
-        ),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 4,
-                decoration: BoxDecoration(
-                  color: sev,
-                  borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      bottomLeft: Radius.circular(20)),
-                  boxShadow: [
-                    BoxShadow(
-                        color: sev.withOpacity(0.5), blurRadius: 10)
+              // 4. Recent Analyses horizontal strip list
+              Text(
+                'LATEST CROP DETECTION STREAM',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.text,
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              SizedBox(
+                height: 96.0,
+                child: recentDetectionsAsync.when(
+                  data: (detections) {
+                    if (detections.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No active infections detected',
+                          style: TextStyle(color: AppColors.textFaint, fontSize: 12.0),
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: detections.length,
+                      itemBuilder: (context, index) {
+                        return _buildRecentAnalysisCard(detections[index]);
+                      },
+                    );
+                  },
+                  loading: () => const Center(child: CircularProgressIndicator(color: AppColors.green)),
+                  error: (err, stack) => Center(
+                    child: Text('Error: $err', style: const TextStyle(color: AppColors.crit, fontSize: 12.0)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24.0),
+
+              // 5. Weekly Chart Card (Analyzed count)
+              GlassCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'INFERENCES BY DAY (LAST 7 DAYS)',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: AppColors.textDim,
+                        fontSize: 11.0,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 24.0),
+                    SizedBox(
+                      height: 160.0,
+                      child: chartDataAsync.when(
+                        data: (chartData) {
+                          if (chartData.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'No analyses processed during this period',
+                                style: TextStyle(color: AppColors.textFaint, fontSize: 12.0),
+                              ),
+                            );
+                          }
+                          return _buildWeeklyChart(chartData);
+                        },
+                        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.green)),
+                        error: (err, stack) => Center(
+                          child: Text('Error loading statistics: $err', style: const TextStyle(color: AppColors.crit, fontSize: 12.0)),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.06),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(d.crop.toUpperCase(),
-                                style: GoogleFonts.dmMono(
-                                    fontSize: 10,
-                                    color: const Color(0xFF86A98E),
-                                    letterSpacing: 1)),
-                          ),
-                          if (!isUnknown)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: sev.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                    color: sev.withOpacity(0.4)),
-                              ),
-                              child: Text(
-                                isHealthy
-                                    ? 'HEALTHY'
-                                    : (conf >= 0.7
-                                        ? 'HIGH CONF'
-                                        : conf >= 0.4
-                                            ? 'MEDIUM'
-                                            : 'LOW CONF'),
-                                style: GoogleFonts.dmMono(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                    color: sev,
-                                    letterSpacing: 0.8),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        isUnknown ? 'Awaiting Scan...' : formattedDisease,
-                        style: GoogleFonts.syne(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w800,
-                          color: isUnknown
-                              ? const Color(0xFF4A6B51)
-                              : const Color(0xFFE8F5E9),
-                          height: 1.1,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      if (!isUnknown) ...[
-                        Row(children: [
-                          Text('${(conf * 100).toStringAsFixed(1)}%',
-                              style: GoogleFonts.dmMono(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: sev)),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: TweenAnimationBuilder<double>(
-                                tween: Tween(begin: 0, end: conf),
-                                duration: const Duration(milliseconds: 900),
-                                curve: Curves.easeOut,
-                                builder: (_, v, __) =>
-                                    LinearProgressIndicator(
-                                  value: v,
-                                  backgroundColor:
-                                      Colors.black.withOpacity(0.4),
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(sev),
-                                  minHeight: 10,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ]),
-                        const SizedBox(height: 12),
-                      ],
-                      Text(
-                        d.timestamp > 0
-                            ? 'Scanned ${DateFormat('MMM dd · HH:mm').format(DateTime.fromMillisecondsSinceEpoch(d.timestamp))}'
-                            : 'No timestamp',
-                        style: GoogleFonts.instrumentSans(
-                            fontSize: 12,
-                            color: const Color(0xFF4A6B51)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -519,138 +312,261 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
-  Widget _buildDetectionEmpty(BuildContext context) {
-    return GlassCard(
-      child: Center(
-        child: Column(children: [
-          const Icon(Icons.radar, color: Color(0xFF4A6B51), size: 40),
-          const SizedBox(height: 12),
-          Text('Awaiting Scan...',
-              style: GoogleFonts.syne(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF4A6B51))),
-        ]),
-      ),
+  Widget _buildHeroStat(String title, String val, {bool highlight = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.spaceGrotesk(
+            color: AppColors.textFaint,
+            fontSize: 9.0,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4.0),
+        Text(
+          val,
+          style: GoogleFonts.syne(
+            color: highlight ? AppColors.warn : AppColors.text,
+            fontSize: 18.0,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildSoilRow(BuildContext context, SoilData s) {
-    return Row(children: [
-      Expanded(
-          child: _soilCard(
-        context,
-        icon: Icons.water_drop_rounded,
-        value: '${s.moisture.toStringAsFixed(1)}%',
-        label: 'MOISTURE',
-        tint: const Color(0xFF38BDF8),
-        up: true,
-      )),
-      const SizedBox(width: 10),
-      Expanded(
-          child: _soilCard(
-        context,
-        icon: Icons.thermostat_rounded,
-        value: '${s.temperature.toStringAsFixed(1)}°',
-        label: 'TEMP',
-        tint: const Color(0xFFFB923C),
-        up: false,
-      )),
-      const SizedBox(width: 10),
-      Expanded(
-          child: _soilCard(
-        context,
-        icon: Icons.cloud_rounded,
-        value: '${s.humidity.toStringAsFixed(1)}%',
-        label: 'HUMIDITY',
-        tint: const Color(0xFF4ADE80),
-        up: true,
-      )),
-    ]);
+  Widget _buildKpiGrid(
+    WidgetRef ref,
+    AsyncValue<int> pendingAsync,
+    AsyncValue<int> analyzedAsync,
+    AsyncValue<int> todayDetectionsAsync,
+    AsyncValue<AlertLevel> alertLevelAsync,
+  ) {
+    final pendingCount = pendingAsync.value ?? 0;
+    final analyzedCount = analyzedAsync.value ?? 0;
+    final detectionsCount = todayDetectionsAsync.value ?? 0;
+    final alertLevel = alertLevelAsync.value ?? AlertLevel.low;
+
+    Color alertColor = AppColors.green;
+    String alertText = 'LOW';
+    if (alertLevel == AlertLevel.high) {
+      alertColor = AppColors.crit;
+      alertText = 'HIGH';
+    } else if (alertLevel == AlertLevel.medium) {
+      alertColor = AppColors.warn;
+      alertText = 'MEDIUM';
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 16.0,
+          mainAxisSpacing: 16.0,
+          childAspectRatio: 1.6,
+          children: [
+            _buildStatTile(
+              'PENDING REVIEW',
+              pendingCount.toString(),
+              Icons.pending_actions_outlined,
+              pendingCount > 0 ? AppColors.warn : AppColors.green,
+            ),
+            _buildStatTile(
+              'ANALYZED TODAY',
+              analyzedCount.toString(),
+              Icons.done_all_outlined,
+              AppColors.greenSoft,
+            ),
+            _buildStatTile(
+              "TODAY'S INFECTIONS",
+              detectionsCount.toString(),
+              Icons.radar_outlined,
+              AppColors.greenLime,
+            ),
+            _buildStatTile(
+              'DISEASE THREAT',
+              alertText,
+              Icons.warning_amber_outlined,
+              alertColor,
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  Widget _soilCard(BuildContext context,
-      {required IconData icon,
-      required String value,
-      required String label,
-      required Color tint,
-      required bool up}) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            tint.withOpacity(0.08),
-            const Color(0xFF111A14),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: tint.withOpacity(0.18)),
-        boxShadow: [
-          BoxShadow(
-              color: tint.withOpacity(0.05),
-              blurRadius: 16,
-              offset: const Offset(0, 6)),
-        ],
-      ),
+  Widget _buildStatTile(String label, String value, IconData icon, Color color) {
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: tint.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
+              Text(
+                label,
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textFaint,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
                 ),
-                child: Icon(icon, color: tint, size: 18),
               ),
-              Icon(
-                up ? Icons.arrow_upward : Icons.arrow_downward,
-                size: 13,
-                color: const Color(0xFF4A6B51),
-              ),
+              Icon(icon, size: 14.0, color: color),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(value,
-              style: GoogleFonts.dmMono(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w400,
-                  color: const Color(0xFFE8F5E9))),
-          const SizedBox(height: 4),
-          Text(label,
-              style: GoogleFonts.instrumentSans(
-                  fontSize: 10,
-                  letterSpacing: 1.5,
-                  color: const Color(0xFF4A6B51))),
+          Text(
+            value,
+            style: GoogleFonts.syne(
+              color: color,
+              fontSize: 20.0,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _sectionLabel(String text) {
-    return Text(text,
-        style: GoogleFonts.dmMono(
-            fontSize: 10,
-            letterSpacing: 2.5,
-            fontWeight: FontWeight.w500,
-            color: const Color(0xFF4A6B51)));
+  Widget _buildRecentAnalysisCard(Detection item) {
+    final imageUrl = item.imageUrl ?? '';
+    return Container(
+      width: 220.0,
+      margin: const EdgeInsets.only(right: 12.0),
+      child: GlassCard(
+        bright: false,
+        padding: const EdgeInsets.all(8.0),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: SizedBox(
+                width: 64.0,
+                height: 64.0,
+                child: imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(color: AppColors.surface2),
+                      )
+                    : Container(color: AppColors.surface2),
+              ),
+            ),
+            const SizedBox(width: 12.0),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    item.displayLabel,
+                    style: TextStyle(
+                      color: item.color,
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Space Grotesk',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2.0),
+                  Text(
+                    'FLT_${item.flightId.toString().padLeft(4, '0')}',
+                    style: const TextStyle(
+                      color: AppColors.textFaint,
+                      fontSize: 9.0,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                  const SizedBox(height: 2.0),
+                  Text(
+                    item.confidencePercent,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 11.0,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  Widget _shimmer({required double height}) {
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [const Color(0xFF1A2A1E), const Color(0xFF1F3224)],
+  Widget _buildWeeklyChart(List<Map<String, dynamic>> chartData) {
+    List<BarChartGroupData> groups = [];
+    for (int i = 0; i < chartData.length; i++) {
+      final count = chartData[i]['count'] as int? ?? 0;
+      groups.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: count.toDouble(),
+              color: AppColors.green,
+              width: 14.0,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(4.0)),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(18),
+      );
+    }
+
+    double maxY = 10.0;
+    if (chartData.isNotEmpty) {
+      final counts = chartData.map((e) => e['count'] as int);
+      final maxVal = counts.reduce((a, b) => a > b ? a : b).toDouble();
+      if (maxVal > 8.0) {
+        maxY = maxVal + 2.0;
+      }
+    }
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxY,
+        barGroups: groups,
+        gridData: const FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 || idx >= chartData.length) return const SizedBox.shrink();
+                final dateStr = chartData[idx]['date'] as String;
+                final parts = dateStr.split('-');
+                final label = parts.length == 3 ? '${parts[1]}/${parts[2]}' : dateStr;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.textDim,
+                      fontSize: 9.0,
+                      fontFamily: 'JetBrains Mono',
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }

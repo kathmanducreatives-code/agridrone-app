@@ -7,6 +7,7 @@ import '../providers/demo_mode_provider.dart';
 import '../providers/report_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/agri_ui.dart';
+import '../widgets/asset_illustrations.dart';
 import 'report_view_screen.dart';
 
 /// Reports — real crop reports generated from real diagnosis/campaign data.
@@ -32,6 +33,33 @@ class ReportsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Premium Banner Illustration Header
+                Container(
+                  height: 150,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.greenDeep.withValues(alpha: 0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Image.asset(
+                      AppAssets.reportHeader,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                            color: AppColors.greenDeep.withValues(alpha: 0.2));
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 const PageHeader(
                   title: 'Reports',
                   subtitle:
@@ -60,6 +88,7 @@ class ReportsScreen extends ConsumerWidget {
                         title: 'No crop report yet',
                         message:
                             'No crop report yet. Open a campaign with analyzed crop images and tap Generate Report to create a real report.',
+                        illustrationPath: AppAssets.emptyReports,
                       );
                     }
                     return Column(

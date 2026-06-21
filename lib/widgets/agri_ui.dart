@@ -420,13 +420,13 @@ class DemoStoryCard extends StatelessWidget {
     );
   }
 }
-
 class EmptyStateCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final String? illustrationPath;
 
   const EmptyStateCard({
     super.key,
@@ -435,6 +435,7 @@ class EmptyStateCard extends StatelessWidget {
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.illustrationPath,
   });
 
   @override
@@ -444,8 +445,21 @@ class EmptyStateCard extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _IconBubble(icon: icon, color: AppColors.green, size: 48),
-          const SizedBox(height: 16),
+          if (illustrationPath != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.asset(
+                illustrationPath!,
+                height: 140,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => _IconBubble(icon: icon, color: AppColors.green, size: 48),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ] else ...[
+            _IconBubble(icon: icon, color: AppColors.green, size: 48),
+            const SizedBox(height: 16),
+          ],
           Text(
             title,
             textAlign: TextAlign.center,

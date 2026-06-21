@@ -9,6 +9,7 @@ import '../providers/farmer_profile_provider.dart';
 import '../providers/global_ai_advisor_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/agri_ui.dart';
+import '../widgets/asset_illustrations.dart';
 import '../widgets/ai_assistant_panel.dart';
 
 class AiAdvisorScreen extends ConsumerWidget {
@@ -207,6 +208,7 @@ class _AdvisorContextPanel extends StatelessWidget {
               title: 'No crop image selected',
               message:
                   'Upload or select a crop image to get personalized guidance.',
+              illustrationPath: AppAssets.emptyCropImages,
             ),
           const SizedBox(height: 16),
           Text(

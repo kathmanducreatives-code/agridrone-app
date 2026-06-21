@@ -80,6 +80,27 @@ class Detection {
   }
 
   Color get color => AppColors.diseaseColors[label] ?? AppColors.green;
-  String get displayLabel => label.replaceAll('_', ' ');
+  String get displayLabel {
+    final clean = label.replaceAll('_', ' ').toLowerCase();
+    if (clean.contains('rice blast') || clean.contains('rice_blast') || clean == 'rice blast disease') {
+      return 'धानको ब्लास्ट रोग (Rice Blast)';
+    }
+    if (clean.contains('brown spot') || clean.contains('rice_brown_spot') || clean == 'brown spot disease') {
+      return 'ब्राउन स्पट रोग (Brown Spot)';
+    }
+    if (clean.contains('stem borer') || clean.contains('gabaro') || clean.contains('borer')) {
+      return 'गवारो किरा (Gabaro/Stem Borer)';
+    }
+    if (clean.contains('khaira')) {
+      return 'खैरा रोग (Khaira Disease)';
+    }
+    if (clean.contains('narrow brown spot')) {
+      return 'न्यारो ब्राउन स्पट (Narrow Brown)';
+    }
+    if (clean.contains('dirty panicle')) {
+      return 'डर्टी प्यानिकल रोग (Dirty Panicle)';
+    }
+    return label.replaceAll('_', ' ');
+  }
   String get confidencePercent => '${(confidence * 100).toStringAsFixed(1)}%';
 }

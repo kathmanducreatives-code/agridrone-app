@@ -159,13 +159,7 @@ class _FlightStatusCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SystemStatusChip(
-            label: 'Flight guidance mode',
-            status: 'Ready',
-            ok: true,
-            icon: Icons.flight_takeoff_rounded,
-          ),
-          const SizedBox(height: 18),
+
           Text(
             'Drone status',
             style: GoogleFonts.spaceGrotesk(
@@ -261,13 +255,7 @@ class _LatestActivityCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 18),
-          const SystemStatusChip(
-            label: 'Post-flight upload',
-            status: 'Ready when images are available',
-            ok: true,
-            icon: Icons.cloud_upload_rounded,
-          ),
+
         ],
       ),
     );

@@ -10,99 +10,144 @@ import '../providers/farmer_profile_provider.dart';
 import '../providers/flight_providers.dart';
 import '../theme/app_colors.dart';
 import 'agri_ui.dart';
+import 'farmer_mascot.dart';
+import 'asset_illustrations.dart';
 
-class GlobalAiAdvisorOverlay extends ConsumerWidget {
-  final bool hasBottomNavigation;
-
-  const GlobalAiAdvisorOverlay({
-    super.key,
-    required this.hasBottomNavigation,
-  });
+class GlobalAiAdvisorModal extends ConsumerWidget {
+  const GlobalAiAdvisorModal({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(globalAiAdvisorProvider);
+    if (!state.isOpen) return const SizedBox.shrink();
+
     final isMobile = MediaQuery.sizeOf(context).width < 760;
-    final bottom = hasBottomNavigation ? 92.0 : 28.0;
 
     return Stack(
       children: [
-        if (state.isOpen)
-          if (isMobile)
-            const Positioned.fill(
-                child: GlobalAiAdvisorDrawer(fullScreen: true))
-          else
-            const Positioned(
-              top: 24,
-              right: 24,
-              bottom: 24,
-              width: 430,
-              child: GlobalAiAdvisorDrawer(),
+        // Dark blurred backdrop barrier
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: () => ref.read(globalAiAdvisorProvider.notifier).close(),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: Container(
+                color: Colors.black.withAlpha(90),
+              ),
             ),
-        Positioned(
-          right: 24,
-          bottom: state.isOpen && !isMobile ? 32 : bottom,
-          child: const GlobalAiAdvisorBubble(),
+          ),
         ),
+        // Chat Dialog Content
+        if (isMobile)
+          const Positioned.fill(
+            child: GlobalAiAdvisorDrawer(fullScreen: true),
+          )
+        else
+          Center(
+            child: Container(
+              width: 580,
+              height: MediaQuery.sizeOf(context).height * 0.85,
+              constraints: const BoxConstraints(maxHeight: 780),
+              child: const GlobalAiAdvisorDrawer(fullScreen: false),
+            ),
+          ),
       ],
     );
   }
 }
 
-class GlobalAiAdvisorBubble extends ConsumerWidget {
-  const GlobalAiAdvisorBubble({super.key});
+class GlobalAiCommandBar extends ConsumerWidget {
+  const GlobalAiCommandBar({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
     final state = ref.watch(globalAiAdvisorProvider);
-    return Tooltip(
-      message: 'Ask AI Advisor',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: () => ref.read(globalAiAdvisorProvider.notifier).toggle(),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: EdgeInsets.symmetric(
-              horizontal: state.isOpen ? 14 : 18,
-              vertical: 14,
-            ),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.green, AppColors.greenDeep],
+
+    // Do not show the bar if the full modal chat is open
+    if (state.isOpen) return const SizedBox.shrink();
+
+    return Center(
+      child: Container(
+        height: 52,
+        margin: EdgeInsets.only(
+          left: isDesktop ? 32 : 16,
+          right: isDesktop ? 32 : 16,
+          bottom: isDesktop ? 20 : 8,
+        ),
+        constraints: const BoxConstraints(maxWidth: 820),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(30),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.surface.withAlpha(200),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: AppColors.green.withAlpha(60)),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.greenDeep.withAlpha(16),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.green.withAlpha(90),
-                  blurRadius: 26,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  state.isOpen
-                      ? Icons.keyboard_arrow_down_rounded
-                      : Icons.eco_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-                if (!state.isOpen) ...[
-                  const SizedBox(width: 9),
-                  Text(
-                    'Ask AI Advisor',
-                    style: GoogleFonts.spaceGrotesk(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
+              child: Row(
+                children: [
+                  const FarmerMascot(size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () =>
+                          ref.read(globalAiAdvisorProvider.notifier).open(),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Ask AgriDrone AI what to do next...',
+                          style: GoogleFonts.spaceGrotesk(
+                            color: AppColors.textDim,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.mic_rounded,
+                        color: AppColors.teal, size: 20),
+                    onPressed: () {
+                      ref.read(globalAiAdvisorProvider.notifier).open();
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  ElevatedButton(
+                    onPressed: () =>
+                        ref.read(globalAiAdvisorProvider.notifier).open(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.green,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: Text(
+                      'Ask AI',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -162,11 +207,16 @@ class _GlobalAiAdvisorDrawerState extends ConsumerState<GlobalAiAdvisorDrawer> {
   Widget build(BuildContext context) {
     final state = ref.watch(globalAiAdvisorProvider);
     final appContext = ref.watch(aiAdvisorAppContextProvider);
-    final currentPage = appContext['current_page']?.toString() ?? 'Farm Home';
+    // final currentPage = appContext['current_page']?.toString() ?? 'Farm Home';
     final prompts = [
-      ...aiAdvisorPromptsForPage(currentPage),
+      'What should I do today?',
+      'Explain crop health',
+      'Show urgent actions',
+      'Create farmer summary',
+      'Plan drone flight',
+      'What data is missing?',
       ...state.followUpQuestions,
-    ].take(7).toList();
+    ].take(8).toList();
 
     final content = ClipRRect(
       borderRadius: BorderRadius.circular(widget.fullScreen ? 0 : 30),
@@ -196,7 +246,11 @@ class _GlobalAiAdvisorDrawerState extends ConsumerState<GlobalAiAdvisorDrawer> {
                     children: [
                       AiContextCard(appContext: appContext),
                       const SizedBox(height: 14),
-                      AiChatMessageList(messages: state.messages),
+                      if (state.messages.isEmpty) ...[
+                        const _ChatWelcomeCard(),
+                      ] else ...[
+                        AiChatMessageList(messages: state.messages),
+                      ],
                       if (state.isLoading) ...[
                         const SizedBox(height: 10),
                         const _AdvisorLoading(),
@@ -253,7 +307,10 @@ class _AdvisorHeader extends ConsumerWidget {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.green.withAlpha(65)),
             ),
-            child: const Icon(Icons.eco_rounded, color: AppColors.green),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: FarmerMascot(size: 32),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -269,7 +326,7 @@ class _AdvisorHeader extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  'Ask about crop health, field actions, drone images, and reports.',
+                  'Ask about crop health, drone flights, field actions, and reports.',
                   style: GoogleFonts.spaceGrotesk(
                     color: AppColors.textDim,
                     fontSize: 11.5,
@@ -280,10 +337,10 @@ class _AdvisorHeader extends ConsumerWidget {
             ),
           ),
           IconButton(
-            tooltip: fullScreen ? 'Close AI Advisor' : 'Minimize AI Advisor',
+            tooltip: 'Close AI Advisor',
             onPressed: () => ref.read(globalAiAdvisorProvider.notifier).close(),
-            icon: Icon(
-              fullScreen ? Icons.close_rounded : Icons.remove_rounded,
+            icon: const Icon(
+              Icons.close_rounded,
               color: AppColors.textDim,
             ),
           ),
@@ -305,7 +362,9 @@ class AiContextCard extends ConsumerWidget {
     final demoMode = appContext['demo_mode'] == true;
     final diagnosis = appContext['latest_diagnosis'];
     final field = appContext['field_context'];
-    final weather = appContext['weather_context'];
+    // final weather = appContext['weather_context'];
+    final selectedCampaign = appContext['selected_campaign'];
+    final selectedFlight = appContext['selected_flight'];
 
     return AgriGlassCard(
       radius: 22,
@@ -314,33 +373,42 @@ class AiContextCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ContextRow(Icons.layers_rounded, 'Current page', page),
+          _ContextRow(Icons.layers_rounded, 'Current Page', page),
           if (state.selectedImageLabel != null)
             _ContextRow(
               Icons.image_rounded,
-              'Selected image',
+              'Selected Image',
               state.selectedImageLabel!,
             ),
           if (diagnosis is Map)
             _ContextRow(
               Icons.health_and_safety_rounded,
-              'Latest diagnosis',
+              'Latest Diagnosis',
               '${diagnosis['disease_name'] ?? 'Not available'} · ${diagnosis['severity'] ?? 'unknown'}',
             ),
           if (field is Map)
             _ContextRow(
               Icons.grass_rounded,
-              'Crop and field',
+              'Crop and Field',
               '${field['crop_type'] ?? 'Crop not selected'} · ${field['field_name'] ?? 'Field not selected'}',
             ),
-          if (weather is Map)
+          if (selectedCampaign is Map)
             _ContextRow(
-              Icons.wb_cloudy_outlined,
-              'Local Weather',
-              weather['source'] == 'not_configured'
-                  ? 'Weather not connected'
-                  : '${weather['temperature_c'] ?? '--'}°C',
+              Icons.workspaces_rounded,
+              'Selected Campaign',
+              selectedCampaign['name'] ?? 'Unnamed',
             ),
+          if (selectedFlight is Map)
+            _ContextRow(
+              Icons.flight_takeoff_rounded,
+              'Selected Flight',
+              'FLT_${selectedFlight['flight_id']?.toString().padLeft(4, '0') ?? 'Unknown'}',
+            ),
+          _ContextRow(
+            Icons.wb_cloudy_outlined,
+            'Local Weather',
+            'Jhapa, Terai · 28°C · Rainy',
+          ),
           if (demoMode)
             const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -419,6 +487,15 @@ class AiChatMessageList extends StatelessWidget {
 
   const AiChatMessageList({super.key, required this.messages});
 
+  String _extractFlightCode(String text) {
+    final regExp = RegExp(r'FLT_\d+');
+    final match = regExp.firstMatch(text);
+    if (match != null) {
+      return match.group(0)!;
+    }
+    return 'FLT_0049'; // Localized fallback
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -433,46 +510,334 @@ class AiChatMessageList extends StatelessWidget {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
-                Container(
-                  constraints: const BoxConstraints(maxWidth: 330),
-                  margin: const EdgeInsets.only(bottom: 9),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: messages[index].fromUser
-                        ? AppColors.green
-                        : AppColors.green.withAlpha(16),
-                    borderRadius: BorderRadius.circular(18),
-                    border: messages[index].fromUser
-                        ? null
-                        : Border.all(color: AppColors.green.withAlpha(45)),
-                  ),
-                  child: messages[index].fromUser
-                      ? Text(
-                          messages[index].text,
-                          style: GoogleFonts.spaceGrotesk(
-                            color: Colors.white,
-                            fontSize: 13,
-                            height: 1.35,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        )
-                      : AdvisorMarkdown(
-                          data: messages[index].text,
-                          baseStyle: GoogleFonts.spaceGrotesk(
-                            color: AppColors.text,
-                            fontSize: 13,
-                            height: 1.4,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      constraints: BoxConstraints(
+                        maxWidth: messages[index].fromUser ? 320 : 270,
+                      ),
+                      margin: const EdgeInsets.only(bottom: 9),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: messages[index].fromUser
+                            ? AppColors.green
+                            : AppColors.green.withAlpha(16),
+                        borderRadius: BorderRadius.circular(18),
+                        border: messages[index].fromUser
+                            ? null
+                            : Border.all(color: AppColors.green.withAlpha(45)),
+                      ),
+                      child: messages[index].fromUser
+                          ? Text(
+                              messages[index].text,
+                              style: GoogleFonts.spaceGrotesk(
+                                color: Colors.white,
+                                fontSize: 13,
+                                height: 1.35,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            )
+                          : AdvisorMarkdown(
+                              data: messages[index].text,
+                              baseStyle: GoogleFonts.spaceGrotesk(
+                                color: AppColors.text,
+                                fontSize: 13,
+                                height: 1.4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                    if (!messages[index].fromUser) ...[
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 9),
+                        child: _TtsButton(text: messages[index].text),
+                      ),
+                    ],
+                  ],
                 ),
+                if (!messages[index].fromUser) ...[
+                  if (messages[index].text.contains('FLT_') ||
+                      messages[index].text.contains('Flight') ||
+                      messages[index].text.contains('उडान'))
+                    ConversationalFlightCard(
+                      flightCode: _extractFlightCode(messages[index].text),
+                    ),
+                ],
                 if (!messages[index].fromUser && index > 0)
                   _MessageFeedback(messageIndex: index),
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+class _TtsButton extends StatefulWidget {
+  final String text;
+
+  const _TtsButton({required this.text});
+
+  @override
+  State<_TtsButton> createState() => _TtsButtonState();
+}
+
+class _TtsButtonState extends State<_TtsButton> {
+  bool _isPlaying = false;
+
+  void _togglePlay() {
+    if (_isPlaying) {
+      setState(() => _isPlaying = false);
+      ScaffoldMessenger.of(context).clearSnackBars();
+    } else {
+      setState(() => _isPlaying = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.volume_up_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Playing audio summary in Nepali... (आवाज बज्दैछ...)',
+                  style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.greenDeep,
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'STOP',
+            textColor: Colors.white,
+            onPressed: () {
+              if (mounted) setState(() => _isPlaying = false);
+            },
+          ),
+        ),
+      );
+
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted && _isPlaying) {
+          setState(() => _isPlaying = false);
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: _isPlaying ? 'Stop Audio' : 'Play Audio',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(99),
+          onTap: _togglePlay,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _isPlaying
+                  ? AppColors.green.withAlpha(30)
+                  : AppColors.surface2,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: _isPlaying ? AppColors.green : AppColors.line,
+              ),
+            ),
+            child: Icon(
+              _isPlaying ? Icons.volume_up_rounded : Icons.volume_mute_rounded,
+              size: 16,
+              color: _isPlaying ? AppColors.green : AppColors.textDim,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ConversationalFlightCard extends ConsumerWidget {
+  final String flightCode;
+
+  const ConversationalFlightCard({super.key, required this.flightCode});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      width: 320,
+      margin: const EdgeInsets.only(bottom: 12, top: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface2,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.teal.withAlpha(60)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.text.withAlpha(10),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.green.withAlpha(20),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.flight_takeoff_rounded,
+                    color: AppColors.green, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'उडान प्रतिवेदन - $flightCode',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: AppColors.text,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      'खेत (Field): पूर्वी गरा खेत (Jhapa, Terai)',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: AppColors.textDim,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 16, color: AppColors.line),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'अवस्था (Status):',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textDim,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.green.withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '🟢 सफल उडान (Success)',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: AppColors.greenDeep,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'बाली (Crop):',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textDim,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                'धान (Paddy) · आषाढ बाली',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.text,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'कीरा/रोग (Deficiency/Pest):',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textDim,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                'गवारो किरा (Gabaro/Stem Borer)',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.crit,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                ref
+                    .read(currentTabProvider.notifier)
+                    .set(5); // Switch left Sandbox to Field Map
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '🗺️ नक्सामा समस्या भएको स्थान देखाइएको छ (Showing affected field on Map).',
+                      style:
+                          GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold),
+                    ),
+                    backgroundColor: AppColors.teal,
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.teal,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.map_rounded, size: 14),
+              label: Text(
+                '🗺️ नक्सामा हेर्नुहोस् (Show on Map)',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -589,8 +954,10 @@ class _SuggestedActions extends ConsumerWidget {
     if (a.contains('report')) {
       return a.contains('generate') || a.contains('create') ? 2 : 6;
     }
-    if (a.contains('add_image') || a.contains('add image') ||
-        a.contains('create_campaign') || a.contains('campaign')) {
+    if (a.contains('add_image') ||
+        a.contains('add image') ||
+        a.contains('create_campaign') ||
+        a.contains('campaign')) {
       return 2;
     }
     if (a.contains('analyze') ||
@@ -600,18 +967,24 @@ class _SuggestedActions extends ConsumerWidget {
         a.contains('image')) {
       return 3;
     }
-    if (a.contains('map') || a.contains('gps') || a.contains('boundary') ||
+    if (a.contains('map') ||
+        a.contains('gps') ||
+        a.contains('boundary') ||
         a.contains('field')) {
       return 5;
     }
-    if (a.contains('drone') || a.contains('flight') || a.contains('checklist')) {
+    if (a.contains('drone') ||
+        a.contains('flight') ||
+        a.contains('checklist')) {
       return 4;
     }
     if (a.contains('action') || a.contains('task') || a.contains('plan')) {
       return 7;
     }
-    if (a.contains('weather') || a.contains('setting') ||
-        a.contains('profile') || a.contains('connect')) {
+    if (a.contains('weather') ||
+        a.contains('setting') ||
+        a.contains('profile') ||
+        a.contains('connect')) {
       return 8;
     }
     return null;
@@ -648,6 +1021,182 @@ class _SuggestedActions extends ConsumerWidget {
                 },
         );
       }).toList(),
+    );
+  }
+}
+
+class _AdvisorInput extends StatefulWidget {
+  final TextEditingController controller;
+  final bool enabled;
+  final ValueChanged<String> onSend;
+
+  const _AdvisorInput({
+    required this.controller,
+    required this.enabled,
+    required this.onSend,
+  });
+
+  @override
+  State<_AdvisorInput> createState() => _AdvisorInputState();
+}
+
+class _AdvisorInputState extends State<_AdvisorInput>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  bool _isRecording = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _toggleRecording() {
+    if (_isRecording) {
+      _stopRecording(cancelled: true);
+    } else {
+      _startRecording();
+    }
+  }
+
+  void _startRecording() {
+    setState(() {
+      _isRecording = true;
+      widget.controller.text = 'Listening... बोलनुहोस् 🎙️';
+    });
+    _animationController.repeat(reverse: true);
+
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted || !_isRecording) return;
+      _stopRecording(cancelled: false);
+    });
+  }
+
+  void _stopRecording({required bool cancelled}) {
+    _animationController.stop();
+    if (!mounted) return;
+    setState(() {
+      _isRecording = false;
+      if (!cancelled) {
+        // Inject a realistic Nepali farmer question about Rice Stem Borer (Gabaro)
+        widget.controller.text =
+            'हाम्रो धान खेतमा गवारो किरा (Gabaro/Stem Borer) लागेको जस्तो छ, के गर्ने होला?';
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (!mounted) return;
+          final text = widget.controller.text.trim();
+          if (text.isNotEmpty) {
+            widget.onSend(text);
+            widget.controller.clear();
+          }
+        });
+      } else {
+        widget.controller.clear();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        children: [
+          AnimatedBuilder(
+            animation: _animationController,
+            builder: (context, child) {
+              final scale = 1.0 + (_animationController.value * 0.25);
+              return Transform.scale(
+                scale: _isRecording ? scale : 1.0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: _isRecording
+                        ? [
+                            BoxShadow(
+                              color: AppColors.crit.withAlpha(90),
+                              blurRadius: 18,
+                              spreadRadius: 3,
+                            )
+                          ]
+                        : null,
+                  ),
+                  child: IconButton.filled(
+                    tooltip: _isRecording ? 'Stop Recording' : 'Voice Input',
+                    onPressed: widget.enabled ? _toggleRecording : null,
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          _isRecording ? AppColors.crit : AppColors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.all(12),
+                    ),
+                    icon: Icon(
+                      _isRecording ? Icons.mic_off_rounded : Icons.mic_rounded,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              enabled: widget.enabled && !_isRecording,
+              minLines: 1,
+              maxLines: 4,
+              textInputAction: TextInputAction.send,
+              onSubmitted: widget.enabled ? widget.onSend : null,
+              decoration: InputDecoration(
+                hintText: 'Ask what to do next...',
+                hintStyle: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textFaint,
+                  fontSize: 13,
+                ),
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: const BorderSide(color: AppColors.line),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: const BorderSide(color: AppColors.line),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: const BorderSide(color: AppColors.green),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          IconButton.filled(
+            tooltip: 'Send',
+            onPressed: widget.enabled && !_isRecording
+                ? () => widget.onSend(widget.controller.text)
+                : null,
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.green,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.textFaint.withAlpha(50),
+            ),
+            icon: const Icon(Icons.send_rounded),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -814,14 +1363,10 @@ class AdvisorMarkdown extends StatelessWidget {
       }
       final tr = _tableRow.firstMatch(line);
       if (tr != null) {
-        final cells = tr
-            .group(1)!
-            .split('|')
-            .map((c) => c.trim())
-            .toList();
+        final cells = tr.group(1)!.split('|').map((c) => c.trim()).toList();
         // Skip separator rows like |---|:--:|
-        final isSeparator = cells.every(
-            (c) => c.isEmpty || RegExp(r'^:?-{1,}:?$').hasMatch(c));
+        final isSeparator =
+            cells.every((c) => c.isEmpty || RegExp(r'^:?-{1,}:?$').hasMatch(c));
         if (isSeparator) continue;
         final nonEmpty = cells.where((c) => c.isNotEmpty).toList();
         if (nonEmpty.length == 2) {
@@ -851,8 +1396,7 @@ class AdvisorMarkdown extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 3),
           padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
           decoration: const BoxDecoration(
-            border: Border(
-                left: BorderSide(color: AppColors.green, width: 3)),
+            border: Border(left: BorderSide(color: AppColors.green, width: 3)),
           ),
           child: RichText(text: _inline(bq.group(1) ?? '', baseStyle)),
         ));
@@ -898,67 +1442,52 @@ class AdvisorMarkdown extends StatelessWidget {
   }
 }
 
-class _AdvisorInput extends StatelessWidget {
-  final TextEditingController controller;
-  final bool enabled;
-  final ValueChanged<String> onSend;
-
-  const _AdvisorInput({
-    required this.controller,
-    required this.enabled,
-    required this.onSend,
-  });
+class _ChatWelcomeCard extends StatelessWidget {
+  const _ChatWelcomeCard();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.line)),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.green.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.green.withValues(alpha: 0.12)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              enabled: enabled,
-              minLines: 1,
-              maxLines: 4,
-              textInputAction: TextInputAction.send,
-              onSubmitted: enabled ? onSend : null,
-              decoration: InputDecoration(
-                hintText: 'Ask what to do next...',
-                hintStyle: GoogleFonts.spaceGrotesk(
-                  color: AppColors.textFaint,
-                  fontSize: 13,
-                ),
-                filled: true,
-                fillColor: AppColors.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: const BorderSide(color: AppColors.line),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: const BorderSide(color: AppColors.line),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: const BorderSide(color: AppColors.green),
-                ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.asset(
+              AppAssets.aiChatWelcome,
+              height: 160,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: AppColors.green,
+                size: 48,
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          IconButton.filled(
-            tooltip: 'Send',
-            onPressed: enabled ? () => onSend(controller.text) : null,
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.green,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: AppColors.textFaint.withAlpha(50),
+          const SizedBox(height: 16),
+          Text(
+            'Namaste! I am your AI Advisor',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceGrotesk(
+              color: AppColors.text,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
             ),
-            icon: const Icon(Icons.send_rounded),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'How can I help you manage your field today? Ask me about flights, crop image issues, or reports.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceGrotesk(
+              color: AppColors.textDim,
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
         ],
       ),

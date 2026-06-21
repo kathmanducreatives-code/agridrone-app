@@ -68,7 +68,7 @@ class GlobalAiAdvisorState {
         AiChatMessage(
           fromUser: false,
           text:
-              'Hi, I’m your AgriDrone AI Advisor. Ask me what to do today, how serious a crop issue is, or how to prepare a farmer report.',
+              'Namaste! I’m your AgriDrone AI Advisor. Ask me what your field needs today, how serious a crop issue is, or how to prepare a farmer report.',
           createdAt: DateTime.now(),
         ),
       ],

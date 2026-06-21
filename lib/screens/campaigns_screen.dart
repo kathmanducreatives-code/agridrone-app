@@ -8,6 +8,7 @@ import '../providers/flight_providers.dart';
 import '../providers/global_ai_advisor_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/agri_ui.dart';
+import '../widgets/asset_illustrations.dart';
 import 'campaign_detail_screen.dart';
 
 /// Crop Campaigns — groups crop images, a drone flight, diagnoses and reports.
@@ -80,6 +81,7 @@ class _CampaignsList extends ConsumerWidget {
                             'No crop campaigns yet. Create a manual campaign or sync a drone flight to start a real crop inspection project.',
                         actionLabel: 'New Crop Campaign',
                         onAction: () => _createCampaign(context, ref),
+                        illustrationPath: AppAssets.emptyCropImages,
                       );
                     }
                     return Column(

@@ -13,6 +13,7 @@ import '../providers/map_providers.dart';
 import '../providers/report_providers.dart';
 import '../theme/app_colors.dart';
 import '../widgets/agri_ui.dart';
+import '../widgets/asset_illustrations.dart';
 import '../widgets/gallery_tile.dart';
 import 'diagnosis_detail_screen.dart';
 import 'report_view_screen.dart';
@@ -177,6 +178,7 @@ class _CampaignDetailViewState extends ConsumerState<CampaignDetailView> {
                       actionLabel: isManual ? 'Add Images' : null,
                       onAction:
                           isManual ? () => _showAddImages(context) : null,
+                      illustrationPath: AppAssets.emptyCropImages,
                     );
                   }
                   return _ImageGrid(

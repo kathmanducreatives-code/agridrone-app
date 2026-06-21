@@ -1,13 +1,12 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../providers/campaign_providers.dart';
 import '../providers/dashboard_providers.dart';
-import '../providers/demo_mode_provider.dart';
 import '../providers/global_ai_advisor_provider.dart';
+import '../providers/realtime_providers.dart';
+import '../services/realtime_service.dart';
 import '../theme/app_colors.dart';
 import 'global_ai_advisor.dart';
 
@@ -20,15 +19,14 @@ class AgriAppShell extends ConsumerWidget {
   });
 
   static const _items = [
-    _NavItem(Icons.home_rounded, 'Farm Home'),
-    _NavItem(Icons.eco_rounded, 'AI Advisor'),
-    _NavItem(Icons.workspaces_rounded, 'Campaigns'),
-    _NavItem(Icons.photo_library_rounded, 'Crop Images'),
-    _NavItem(Icons.flight_takeoff_rounded, 'Drone Activity'),
-    _NavItem(Icons.map_rounded, 'Field Map'),
-    _NavItem(Icons.description_rounded, 'Reports'),
-    _NavItem(Icons.task_alt_rounded, 'Action Plan'),
-    _NavItem(Icons.tune_rounded, 'Settings'),
+    _NavItem(0, Icons.home_rounded, 'Home'),
+    _NavItem(2, Icons.workspaces_rounded, 'Our Field'),
+    _NavItem(3, Icons.photo_library_rounded, 'Crop Images'),
+    _NavItem(4, Icons.flight_takeoff_rounded, 'Flights'),
+    _NavItem(6, Icons.description_rounded, 'Reports'),
+    _NavItem(5, Icons.map_rounded, 'Map'),
+    _NavItem(7, Icons.task_alt_rounded, 'Alerts'),
+    _NavItem(8, Icons.settings_rounded, 'Settings'),
   ];
 
   @override
@@ -36,7 +34,7 @@ class AgriAppShell extends ConsumerWidget {
     final activeTab = ref.watch(currentTabProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= 900;
 
-    // Leaving the Campaigns tab (index 2) drops the open campaign + its AI
+    // Leaving the Campaigns/Our Field tab (index 2) drops the open campaign + its AI
     // Advisor scope, so the advisor's current page never goes stale.
     ref.listen<int>(currentTabProvider, (prev, next) {
       if (next != 2) {
@@ -45,20 +43,36 @@ class AgriAppShell extends ConsumerWidget {
       }
     });
 
+    final bodyContent = IndexedStack(
+      index: activeTab == 1 ? 0 : activeTab,
+      children: screens,
+    );
+
     if (!isDesktop) {
       return Scaffold(
         backgroundColor: AppColors.bg,
         body: Stack(
           children: [
-            IndexedStack(index: activeTab, children: screens),
-            const GlobalAiAdvisorOverlay(hasBottomNavigation: true),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 76), // leave space for bottom AI bar
+                child: bodyContent,
+              ),
+            ),
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: GlobalAiCommandBar(),
+            ),
+            const GlobalAiAdvisorModal(),
           ],
         ),
         bottomNavigationBar: _MobileNavigation(
           items: _items,
           activeTab: activeTab,
-          onChanged: (index) =>
-              ref.read(currentTabProvider.notifier).set(index),
+          onChanged: (tabIndex) =>
+              ref.read(currentTabProvider.notifier).set(tabIndex),
         ),
       );
     }
@@ -67,241 +81,230 @@ class AgriAppShell extends ConsumerWidget {
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          Row(
-            children: [
-              _Sidebar(
-                items: _items,
-                activeTab: activeTab,
-                onChanged: (index) =>
-                    ref.read(currentTabProvider.notifier).set(index),
-              ),
-              Expanded(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFFF7FBF6),
-                        Color(0xFFFFFFFF),
-                        Color(0xFFEFF8EF),
-                      ],
+          Positioned.fill(
+            child: Column(
+              children: [
+                const _AgriTopHeader(),
+                const _SandboxTabBar(),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1320),
+                      child: bodyContent,
                     ),
                   ),
-                  child: IndexedStack(index: activeTab, children: screens),
                 ),
-              ),
-            ],
+                // Leave bottom space for the fixed AI bar on desktop
+                const SizedBox(height: 80),
+              ],
+            ),
           ),
-          const GlobalAiAdvisorOverlay(hasBottomNavigation: false),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: GlobalAiCommandBar(),
+          ),
+          const GlobalAiAdvisorModal(),
         ],
       ),
     );
   }
 }
 
-class _Sidebar extends ConsumerWidget {
-  final List<_NavItem> items;
-  final int activeTab;
-  final ValueChanged<int> onChanged;
-
-  const _Sidebar({
-    required this.items,
-    required this.activeTab,
-    required this.onChanged,
-  });
+class _AgriTopHeader extends ConsumerWidget {
+  const _AgriTopHeader();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final demoMode = ref.watch(demoModeProvider);
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          width: 262,
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(220),
-            border: const Border(right: BorderSide(color: AppColors.line)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final connStateAsync = ref.watch(realtimeConnectionProvider);
+    Color connectionColor = AppColors.crit;
+    String connLabel = 'Offline';
+
+    connStateAsync.whenData((state) {
+      if (state == RealtimeConnectionState.connected) {
+        connectionColor = AppColors.green;
+        connLabel = 'Online';
+      } else if (state == RealtimeConnectionState.connecting) {
+        connectionColor = AppColors.warn;
+        connLabel = 'Connecting';
+      }
+    });
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
             children: [
-              Row(
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.green.withAlpha(28),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.eco_rounded, color: AppColors.green, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.green,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.green.withAlpha(70),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
+                  Text(
+                    'Namaste, Kisan Dai/Didi',
+                    style: GoogleFonts.spaceGrotesk(
+                      color: AppColors.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
                     ),
-                    child: const Icon(Icons.eco_rounded,
-                        color: Colors.white, size: 24),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'AgriDrone',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: AppColors.text,
-                            fontSize: 18,
-                            height: 1,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          'Guardian',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: AppColors.green,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    'AgriDrone Crop Advisor',
+                    style: GoogleFonts.spaceGrotesk(
+                      color: AppColors.textDim,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 28),
-              Text(
-                'Crop Health Platform',
-                style: GoogleFonts.spaceGrotesk(
-                  color: AppColors.textFaint,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+            ],
+          ),
+          // BS season and district weather
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.teal.withAlpha(20),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.teal.withAlpha(60)),
                 ),
-              ),
-              const SizedBox(height: 10),
-              // Scrollable so ten nav items never overflow on short screens.
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.zero,
+                child: Row(
                   children: [
-                    for (int i = 0; i < items.length; i++)
-                      _SidebarButton(
-                        item: items[i],
-                        selected: i == activeTab,
-                        onTap: () => onChanged(i),
+                    const Icon(Icons.calendar_today_rounded, color: AppColors.teal, size: 13),
+                    const SizedBox(width: 6),
+                    Text(
+                      'असार · Paddy Season',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: AppColors.teal,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
                       ),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppColors.green.withAlpha(18),
+                  color: AppColors.warn.withAlpha(20),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.green.withAlpha(55)),
+                  border: Border.all(color: AppColors.warn.withAlpha(60)),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.auto_awesome_rounded,
-                            color: AppColors.greenDeep, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          demoMode ? 'Demo Preview' : 'Live Data Mode',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: AppColors.greenDeep,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
+                    const Icon(Icons.cloud_queue_rounded, color: AppColors.warn, size: 14),
+                    const SizedBox(width: 6),
                     Text(
-                      demoMode
-                          ? demoPreviewLabel
-                          : 'Live farm data is shown when cloud sync is available.',
+                      'Jhapa, Terai · 28°C · Rainy',
                       style: GoogleFonts.spaceGrotesk(
                         color: AppColors.textDim,
-                        fontSize: 12,
-                        height: 1.35,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Switch.adaptive(
-                      value: demoMode,
-                      activeThumbColor: AppColors.green,
-                      activeTrackColor: AppColors.green.withAlpha(70),
-                      onChanged: (value) =>
-                          ref.read(demoModeProvider.notifier).setEnabled(value),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 16),
+              // Status dot
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: connectionColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    connLabel,
+                    style: GoogleFonts.spaceGrotesk(
+                      color: connectionColor,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-class _SidebarButton extends StatelessWidget {
-  final _NavItem item;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SidebarButton({
-    required this.item,
-    required this.selected,
-    required this.onTap,
-  });
+class _SandboxTabBar extends ConsumerWidget {
+  const _SandboxTabBar();
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: selected ? AppColors.green.withAlpha(26) : Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: selected
-                  ? Border.all(color: AppColors.green.withAlpha(70))
-                  : null,
-            ),
-            child: Row(
-              children: [
-                Icon(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeTab = ref.watch(currentTabProvider);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: AgriAppShell._items.map((item) {
+            final isSelected = activeTab == item.index ||
+                (item.index == 2 && activeTab == 5); // Map/Campaign detail redirects
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                selected: isSelected,
+                avatar: Icon(
                   item.icon,
-                  color: selected ? AppColors.greenDeep : AppColors.textDim,
-                  size: 20,
+                  size: 15,
+                  color: isSelected ? Colors.white : AppColors.textDim,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    item.label,
-                    style: GoogleFonts.spaceGrotesk(
-                      color: selected ? AppColors.greenDeep : AppColors.textDim,
-                      fontSize: 13,
-                      fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-                    ),
-                  ),
+                label: Text(item.label),
+                labelStyle: GoogleFonts.spaceGrotesk(
+                  color: isSelected ? Colors.white : AppColors.text,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
                 ),
-              ],
-            ),
-          ),
+                selectedColor: AppColors.green,
+                backgroundColor: AppColors.surface2,
+                disabledColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Colors.transparent),
+                ),
+                onSelected: (selected) {
+                  if (selected) {
+                    ref.read(currentTabProvider.notifier).set(item.index);
+                  }
+                },
+              ),
+            );
+          }).toList(),
         ),
       ),
     );
@@ -321,8 +324,6 @@ class _MobileNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Ten farmer-ready tabs do not fit a fixed bar on a phone, so the bar
-    // scrolls horizontally and keeps the active tab in view.
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -337,10 +338,10 @@ class _MobileNavigation extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             itemCount: items.length,
             itemBuilder: (context, i) {
-              final selected = i == activeTab;
+              final selected = items[i].index == activeTab;
               return InkWell(
                 borderRadius: BorderRadius.circular(16),
-                onTap: () => onChanged(i),
+                onTap: () => onChanged(items[i].index),
                 child: Container(
                   width: 72,
                   margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -362,7 +363,7 @@ class _MobileNavigation extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        items[i].label.split(' ').first,
+                        items[i].label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.spaceGrotesk(
@@ -387,8 +388,9 @@ class _MobileNavigation extends StatelessWidget {
 }
 
 class _NavItem {
+  final int index;
   final IconData icon;
   final String label;
 
-  const _NavItem(this.icon, this.label);
+  const _NavItem(this.index, this.icon, this.label);
 }

@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/empty_state_illustration.dart';
+import '../widgets/asset_illustrations.dart';
 import '../providers/flight_providers.dart';
 import '../providers/dashboard_providers.dart';
 
@@ -266,29 +268,14 @@ class AlertsScreen extends ConsumerWidget {
                   data: (alerts) {
                     if (alerts.isEmpty) {
                       return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.verified_outlined,
-                                size: 48.0, color: AppColors.green),
-                            const SizedBox(height: 16.0),
-                            Text(
-                              'No urgent crop actions',
-                              style: GoogleFonts.spaceGrotesk(
-                                color: AppColors.text,
-                                fontSize: 16.0,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 4.0),
-                            Text(
-                              'No urgent actions today. Your farm looks stable.',
-                              style: GoogleFonts.spaceGrotesk(
-                                  color: AppColors.textDim, fontSize: 13.0),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: EmptyStateIllustration(
+                            imagePath: AppAssets.cropHealthScan,
+                            title: 'No urgent crop actions',
+                            message: 'No urgent actions today. Your farm looks stable.',
+                            imageHeight: 160,
+                          ),
                         ),
                       );
                     }

@@ -1,3 +1,5 @@
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,20 @@ import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Hard error visibility (works even in release web builds, where
+  // FlutterError.onError is otherwise silent) so post-login layout/paint
+  // errors are printed to the browser console instead of a silent blank.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    // ignore: avoid_print
+    print('FLUTTER_ERROR: ${details.exceptionAsString()}\n${details.stack}');
+  };
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    // ignore: avoid_print
+    print('PLATFORM_ERROR: $error\n$stack');
+    return true;
+  };
 
   // Set up custom error widget for debugging rendering issues
   ErrorWidget.builder = (FlutterErrorDetails details) {

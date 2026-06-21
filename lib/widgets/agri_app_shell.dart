@@ -43,7 +43,7 @@ class AgriAppShell extends ConsumerWidget {
       }
     });
 
-    final bodyContent = IndexedStack(
+    final Widget bodyContent = IndexedStack(
       index: activeTab == 1 ? 0 : activeTab,
       children: screens,
     );
@@ -81,24 +81,22 @@ class AgriAppShell extends ConsumerWidget {
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Column(
-              children: [
-                const _AgriTopHeader(),
-                const _SandboxTabBar(),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1320),
-                      child: bodyContent,
-                    ),
-                  ),
+          Column(
+            children: [
+              const _AgriTopHeader(),
+              const _SandboxTabBar(),
+              // IMPORTANT: keep the screens under a plain Expanded so each
+              // screen Scaffold receives a BOUNDED height. Wrapping them in
+              // Align/ConstrainedBox gives unbounded height and blanks the
+              // whole CanvasKit scene in release web builds. Per-page max-width
+              // is handled inside the pages, not here.
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 72),
+                  child: bodyContent,
                 ),
-                // Leave bottom space for the fixed AI bar on desktop
-                const SizedBox(height: 80),
-              ],
-            ),
+              ),
+            ],
           ),
           const Positioned(
             left: 0,

@@ -34,6 +34,26 @@
 </head>
 <body>
   <!--
+    Defensive: unregister any stale service worker and clear its caches before
+    Flutter boots. A leftover service worker from a previous build can serve a
+    cached engine bundle alongside the fresh one, which double-initialises the
+    Flutter engine ("Trying to load the allocator multiple times") and leaves a
+    blank canvas after the app starts. This guarantees a single, clean boot.
+  -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) { r.unregister(); });
+      }).catch(function () {});
+    }
+    if (window.caches && caches.keys) {
+      caches.keys().then(function (keys) {
+        keys.forEach(function (k) { caches.delete(k); });
+      }).catch(function () {});
+    }
+  </script>
+
+  <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
     or to give the user feedback during the initialization process.

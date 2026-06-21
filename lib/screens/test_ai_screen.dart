@@ -16,7 +16,7 @@ import '../providers/flight_providers.dart'; // contains huggingFaceServiceProvi
 import '../providers/realtime_providers.dart'; // contains realtimeConnectionProvider
 import '../services/realtime_service.dart'; // contains RealtimeConnectionState
 
-/// Dedicated Test AI dashboard screen isolated from standard mission flight curation data.
+/// Farmer-facing crop image check screen.
 class TestAiScreen extends ConsumerStatefulWidget {
   const TestAiScreen({super.key});
 
@@ -65,7 +65,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
 
     for (int i = 0; i < files.length; i++) {
       final file = files[i];
-      if (file.status == UploadStatus.complete || file.status == UploadStatus.failed) {
+      if (file.status == UploadStatus.complete ||
+          file.status == UploadStatus.failed) {
         continue;
       }
 
@@ -106,7 +107,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
         // 5. Query detections
         final detections = await service.getDetectionsForUpload(uploadId);
 
-        _updateFileState(ref, file, UploadStatus.complete, detections: detections);
+        _updateFileState(ref, file, UploadStatus.complete,
+            detections: detections);
       } catch (e) {
         debugPrint('[AgriDrone] Step failure for ${file.name}: $e');
         _updateFileState(ref, file, UploadStatus.failed, error: e.toString());
@@ -149,25 +151,28 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text(
-          'DELETE TEST UPLOAD?',
+          'DELETE CROP CHECK?',
           style: GoogleFonts.spaceGrotesk(
             color: AppColors.crit,
             fontWeight: FontWeight.bold,
           ),
         ),
         content: Text(
-          'This action will permanently delete this upload and all associated disease bboxes.',
+          'This action will permanently delete this crop image check and its saved results.',
           style: GoogleFonts.spaceGrotesk(color: AppColors.text),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(color: AppColors.textDim)),
+            child: Text('CANCEL',
+                style: GoogleFonts.spaceGrotesk(color: AppColors.textDim)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.crit, foregroundColor: Colors.white),
-            child: Text('CONFIRM DELETE', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.crit, foregroundColor: Colors.white),
+            child: Text('CONFIRM DELETE',
+                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -180,7 +185,7 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
           ref.invalidate(allTestUploadsProvider);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Test upload deleted successfully.'),
+              content: Text('Crop image check deleted successfully.'),
               backgroundColor: AppColors.greenDeep,
             ),
           );
@@ -189,7 +194,7 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to delete upload: $e'),
+              content: Text('Failed to delete crop image check: $e'),
               backgroundColor: AppColors.crit,
             ),
           );
@@ -222,7 +227,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
           children: [
             // 1. Navigation Header Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -230,7 +236,7 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'TEST AI SANDBOX',
+                        'CHECK CROP HEALTH',
                         style: GoogleFonts.spaceGrotesk(
                           color: AppColors.text,
                           fontSize: 18.0,
@@ -240,7 +246,7 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                       ),
                       const SizedBox(height: 4.0),
                       Text(
-                        'Isolated diagnostic upload terminal',
+                        'Upload a crop image for an AI health check',
                         style: GoogleFonts.spaceGrotesk(
                           color: AppColors.textFaint,
                           fontSize: 11.0,
@@ -254,8 +260,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                       const SizedBox(width: 8.0),
                       Text(
                         connStateAsync.maybeWhen(
-                          data: (state) => state.name.toUpperCase(),
-                          orElse: () => 'CONNECTING',
+                          data: _connectionLabel,
+                          orElse: () => 'GETTING READY',
                         ),
                         style: GoogleFonts.jetBrainsMono(
                           color: connectionColor,
@@ -279,7 +285,7 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                   children: [
                     // Description
                     Text(
-                      'Upload diagnostic images from your local system to test AI disease boundaries directly. Detections logged here do not affect production drone logs or telemetry metrics.',
+                      'Upload a clear leaf or crop image. AgriDrone AI checks crop health, explains the issue, and gives clear next steps.',
                       style: GoogleFonts.spaceGrotesk(
                         color: AppColors.textDim,
                         fontSize: 13.0,
@@ -306,7 +312,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                     // 3. History Feed Dashboard
                     Row(
                       children: [
-                        Expanded(child: _buildDividerLabel('SANDBOX HISTORY LOGS')),
+                        Expanded(
+                            child: _buildDividerLabel('PREVIOUS CROP CHECKS')),
                       ],
                     ),
                     const SizedBox(height: 16.0),
@@ -342,9 +349,25 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
     );
   }
 
-  Widget _buildPreviewProgressHeader(WidgetRef ref, List<PendingFile> pendingFiles) {
-    final completedCount = pendingFiles.where((f) => f.status == UploadStatus.complete).length;
-    final failedCount = pendingFiles.where((f) => f.status == UploadStatus.failed).length;
+  String _connectionLabel(RealtimeConnectionState state) {
+    switch (state) {
+      case RealtimeConnectionState.connected:
+        return 'READY';
+      case RealtimeConnectionState.connecting:
+        return 'GETTING READY';
+      case RealtimeConnectionState.disconnected:
+        return 'OFFLINE MODE';
+      case RealtimeConnectionState.error:
+        return 'NEEDS CONNECTION';
+    }
+  }
+
+  Widget _buildPreviewProgressHeader(
+      WidgetRef ref, List<PendingFile> pendingFiles) {
+    final completedCount =
+        pendingFiles.where((f) => f.status == UploadStatus.complete).length;
+    final failedCount =
+        pendingFiles.where((f) => f.status == UploadStatus.failed).length;
     final total = pendingFiles.length;
 
     final ratio = total == 0 ? 0.0 : (completedCount + failedCount) / total;
@@ -356,7 +379,7 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'SELECTION BATCH PROGRESS ($total FILES)',
+              'CROP CHECK PROGRESS ($total IMAGES)',
               style: GoogleFonts.spaceGrotesk(
                 color: AppColors.text,
                 fontSize: 11.0,
@@ -368,9 +391,12 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
               children: [
                 TextButton.icon(
                   onPressed: _isAnalyzing ? null : () => _clearPending(ref),
-                  style: TextButton.styleFrom(foregroundColor: AppColors.rejected),
+                  style:
+                      TextButton.styleFrom(foregroundColor: AppColors.rejected),
                   icon: const Icon(Icons.close_rounded, size: 14.0),
-                  label: Text('CLEAR ALL', style: GoogleFonts.spaceGrotesk(fontSize: 10.0, fontWeight: FontWeight.bold)),
+                  label: Text('CLEAR ALL',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 10.0, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 8.0),
                 ElevatedButton.icon(
@@ -378,11 +404,15 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.green,
                     foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14.0, vertical: 8.0),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6.0)),
                   ),
                   icon: const Icon(Icons.play_arrow_rounded, size: 14.0),
-                  label: Text('ANALYZE ALL', style: GoogleFonts.spaceGrotesk(fontSize: 10.0, fontWeight: FontWeight.bold)),
+                  label: Text('CHECK ALL',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 10.0, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -467,33 +497,64 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
   Widget _buildPreviewStatusBadge(PendingFile file) {
     switch (file.status) {
       case UploadStatus.queued:
-        return Text('QUEUED', style: GoogleFonts.spaceGrotesk(color: AppColors.textFaint, fontSize: 8.5, fontWeight: FontWeight.bold));
+        return Text('NEW',
+            style: GoogleFonts.spaceGrotesk(
+                color: AppColors.textFaint,
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold));
       case UploadStatus.uploading:
-        return Text('UPLOADING', style: GoogleFonts.spaceGrotesk(color: AppColors.green, fontSize: 8.5, fontWeight: FontWeight.bold));
+        return Text('UPLOADING',
+            style: GoogleFonts.spaceGrotesk(
+                color: AppColors.green,
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold));
       case UploadStatus.analyzing:
-        return Text('INFERENCE', style: GoogleFonts.spaceGrotesk(color: AppColors.info, fontSize: 8.5, fontWeight: FontWeight.bold));
+        return Text('CHECKING',
+            style: GoogleFonts.spaceGrotesk(
+                color: AppColors.info,
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold));
       case UploadStatus.complete:
         final count = file.detections?.length ?? 0;
-        return Text('$count DETECTED', style: GoogleFonts.spaceGrotesk(color: count > 0 ? AppColors.crit : AppColors.greenSoft, fontSize: 8.5, fontWeight: FontWeight.bold));
+        return Text(count > 0 ? 'DISEASE FOUND' : 'HEALTHY',
+            style: GoogleFonts.spaceGrotesk(
+                color: count > 0 ? AppColors.crit : AppColors.greenSoft,
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold));
       case UploadStatus.failed:
-        return Text('FAILED', style: GoogleFonts.spaceGrotesk(color: AppColors.crit, fontSize: 8.5, fontWeight: FontWeight.bold));
+        return Text('NEEDS ATTENTION',
+            style: GoogleFonts.spaceGrotesk(
+                color: AppColors.crit,
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold));
     }
   }
 
   Widget _buildStatusIcon(PendingFile file) {
     switch (file.status) {
       case UploadStatus.queued:
-        return const Icon(Icons.schedule, color: AppColors.textFaint, size: 14.0);
+        return const Icon(Icons.schedule,
+            color: AppColors.textFaint, size: 14.0);
       case UploadStatus.uploading:
-        return const SizedBox(width: 12.0, height: 12.0, child: CircularProgressIndicator(color: AppColors.green, strokeWidth: 1.5));
+        return const SizedBox(
+            width: 12.0,
+            height: 12.0,
+            child: CircularProgressIndicator(
+                color: AppColors.green, strokeWidth: 1.5));
       case UploadStatus.analyzing:
-        return const SizedBox(width: 12.0, height: 12.0, child: CircularProgressIndicator(color: AppColors.info, strokeWidth: 1.5));
+        return const SizedBox(
+            width: 12.0,
+            height: 12.0,
+            child: CircularProgressIndicator(
+                color: AppColors.info, strokeWidth: 1.5));
       case UploadStatus.complete:
-        return const Icon(Icons.check_circle_rounded, color: AppColors.green, size: 14.0);
+        return const Icon(Icons.check_circle_rounded,
+            color: AppColors.green, size: 14.0);
       case UploadStatus.failed:
         return Tooltip(
           message: file.error ?? 'Step error reported.',
-          child: const Icon(Icons.error_outline_rounded, color: AppColors.crit, size: 14.0),
+          child: const Icon(Icons.error_outline_rounded,
+              color: AppColors.crit, size: 14.0),
         );
     }
   }
@@ -508,11 +569,13 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.science_outlined, color: AppColors.textFaint, size: 40.0),
+                const Icon(Icons.science_outlined,
+                    color: AppColors.textFaint, size: 40.0),
                 const SizedBox(height: 12.0),
                 Text(
-                  'No diagnostic test runs found.',
-                  style: GoogleFonts.spaceGrotesk(color: AppColors.textDim, fontSize: 13.0),
+                  'No crop images checked yet. Upload a crop image to get your first AI recommendation.',
+                  style: GoogleFonts.spaceGrotesk(
+                      color: AppColors.textDim, fontSize: 13.0),
                 ),
               ],
             ),
@@ -559,7 +622,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
       error: (e, s) => Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 40.0),
-          child: Text('Error: $e', style: const TextStyle(color: AppColors.crit)),
+          child:
+              Text('Error: $e', style: const TextStyle(color: AppColors.crit)),
         ),
       ),
     );
@@ -583,7 +647,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
           // Image preview container
           Expanded(
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12.0)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12.0)),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -591,10 +656,12 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                     imageUrl: upload.imageUrl,
                     fit: BoxFit.cover,
                     placeholder: (_, __) => const Center(
-                      child: CircularProgressIndicator(color: AppColors.green, strokeWidth: 2.0),
+                      child: CircularProgressIndicator(
+                          color: AppColors.green, strokeWidth: 2.0),
                     ),
                     errorWidget: (_, __, ___) => const Center(
-                      child: Icon(Icons.broken_image, color: AppColors.textFaint),
+                      child:
+                          Icon(Icons.broken_image, color: AppColors.textFaint),
                     ),
                   ),
 
@@ -604,7 +671,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                     left: 0.0,
                     right: 0.0,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8.0, vertical: 4.0),
                       color: Colors.black.withAlpha((255 * 0.70).toInt()),
                       child: Text(
                         upload.sourceFilename ?? upload.uploadUuid,
@@ -624,10 +692,12 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
                     top: 6.0,
                     right: 6.0,
                     child: CircleAvatar(
-                      backgroundColor: Colors.black.withAlpha((255 * 0.60).toInt()),
+                      backgroundColor:
+                          Colors.black.withAlpha((255 * 0.60).toInt()),
                       radius: 14.0,
                       child: IconButton(
-                        icon: const Icon(Icons.close, color: AppColors.crit, size: 12.0),
+                        icon: const Icon(Icons.close,
+                            color: AppColors.crit, size: 12.0),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: () => _confirmDelete(upload),
@@ -706,7 +776,8 @@ class _TestAiScreenState extends ConsumerState<TestAiScreen> {
       decoration: BoxDecoration(
         color: color.withAlpha((255 * 0.12).toInt()),
         borderRadius: BorderRadius.circular(4.0),
-        border: Border.all(color: color.withAlpha((255 * 0.35).toInt()), width: 0.5),
+        border: Border.all(
+            color: color.withAlpha((255 * 0.35).toInt()), width: 0.5),
       ),
       child: Text(
         text.toUpperCase().replaceAll('_', ' '),

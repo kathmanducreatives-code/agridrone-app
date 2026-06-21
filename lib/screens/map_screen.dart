@@ -7,11 +7,13 @@ import '../theme/app_colors.dart';
 import '../models/flight_path_point.dart';
 import '../providers/map_providers.dart';
 import '../providers/realtime_providers.dart'; // contains realtimeConnectionProvider
+import '../providers/global_ai_advisor_provider.dart';
 import '../services/realtime_service.dart'; // contains RealtimeConnectionState
 import '../widgets/glass_card.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/flight_marker.dart';
 import '../widgets/marker_popup_card.dart';
+import '../widgets/agri_ui.dart';
 
 /// Screen presenting geotagged mission captures and flight paths overlaying an interactive map.
 class MapScreen extends ConsumerStatefulWidget {
@@ -55,7 +57,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           children: [
             // Header Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -63,7 +66,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'MAP · FLIGHT GEOGRAPHY',
+                        'FIELD MAP',
                         style: GoogleFonts.spaceGrotesk(
                           color: AppColors.text,
                           fontSize: 16.0,
@@ -73,7 +76,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                       const SizedBox(height: 2.0),
                       Text(
-                        'GPS capture mapping sandbox',
+                        'See where crop issues appear after a drone flight',
                         style: GoogleFonts.spaceGrotesk(
                           color: AppColors.textFaint,
                           fontSize: 11.0,
@@ -87,14 +90,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       const SizedBox(width: 8.0),
                       Text(
                         connStateAsync.maybeWhen(
-                          data: (state) => state.name.toUpperCase(),
-                          orElse: () => 'CONNECTING',
+                          data: _connectionLabel,
+                          orElse: () => 'Getting ready',
                         ),
-                        style: GoogleFonts.jetBrainsMono(
+                        style: GoogleFonts.spaceGrotesk(
                           color: connectionColor,
-                          fontSize: 10.5,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
                         ),
                       ),
                     ],
@@ -103,6 +105,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
             const Divider(color: AppColors.line, height: 1.0),
+
+            _buildFieldOverview(pointsAsync),
 
             // Sidebar / Header Filter Action Bar
             _buildFilterBar(flightIdsAsync, filter),
@@ -119,7 +123,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Text(
-                      'Failed to load geotagged paths: $err',
+                      'Could not load field locations: $err',
                       style: GoogleFonts.spaceGrotesk(color: AppColors.crit),
                     ),
                   ),
@@ -132,7 +136,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Widget _buildFilterBar(AsyncValue<List<int>> flightIdsAsync, MapFilter filter) {
+  Widget _buildFilterBar(
+      AsyncValue<List<int>> flightIdsAsync, MapFilter filter) {
     return Container(
       color: AppColors.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -155,23 +160,26 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       dropdownColor: AppColors.surface,
                       isExpanded: true,
                       hint: Text(
-                        'All Flights',
-                        style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 12.0),
+                        'All flights',
+                        style: GoogleFonts.spaceGrotesk(
+                            color: AppColors.text, fontSize: 12.0),
                       ),
                       items: [
                         DropdownMenuItem<int?>(
                           value: null,
                           child: Text(
                             'All Flights',
-                            style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 12.0),
+                            style: GoogleFonts.spaceGrotesk(
+                                color: AppColors.text, fontSize: 12.0),
                           ),
                         ),
                         ...idsList.map(
                           (id) => DropdownMenuItem<int?>(
                             value: id,
                             child: Text(
-                              'Flight FLT_${id.toString().padLeft(4, '0')}',
-                              style: GoogleFonts.jetBrainsMono(color: AppColors.text, fontSize: 12.0),
+                              'Flight ${id.toString().padLeft(4, '0')}',
+                              style: GoogleFonts.jetBrainsMono(
+                                  color: AppColors.text, fontSize: 12.0),
                             ),
                           ),
                         ),
@@ -180,7 +188,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         setState(() {
                           _selectedPoint = null; // Clear active selections
                         });
-                        ref.read(mapFilterProvider.notifier).setFilter(filter.copyWith(flightId: id));
+                        ref
+                            .read(mapFilterProvider.notifier)
+                            .setFilter(filter.copyWith(flightId: id));
                       },
                     ),
                   ),
@@ -203,11 +213,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   setState(() {
                     _selectedPoint = null;
                   });
-                  ref.read(mapFilterProvider.notifier).setFilter(filter.copyWith(onlyWithDetections: val ?? false));
+                  ref.read(mapFilterProvider.notifier).setFilter(
+                      filter.copyWith(onlyWithDetections: val ?? false));
                 },
               ),
               Text(
-                'ONLY INFECTIONS',
+                'Only crop issues',
                 style: GoogleFonts.spaceGrotesk(
                   color: AppColors.textDim,
                   fontSize: 10.0,
@@ -222,6 +233,82 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  String _connectionLabel(RealtimeConnectionState state) {
+    switch (state) {
+      case RealtimeConnectionState.connected:
+        return 'Ready';
+      case RealtimeConnectionState.connecting:
+        return 'Getting ready';
+      case RealtimeConnectionState.disconnected:
+        return 'Offline mode';
+      case RealtimeConnectionState.error:
+        return 'Needs attention';
+    }
+  }
+
+  Widget _buildFieldOverview(AsyncValue<List<FlightPathPoint>> pointsAsync) {
+    final points = pointsAsync.value ?? const <FlightPathPoint>[];
+    final hasGps = points.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 850;
+          final cards = [
+            SystemStatusChip(
+              label: 'Field boundary',
+              status: 'Not saved yet',
+              ok: false,
+              icon: Icons.grass_rounded,
+            ),
+            SystemStatusChip(
+              label: 'Field locations',
+              status: hasGps
+                  ? '${points.length} linked images'
+                  : 'Not available yet',
+              ok: hasGps,
+              icon: Icons.health_and_safety_rounded,
+            ),
+            const SystemStatusChip(
+              label: 'Moisture',
+              status: 'Not available',
+              ok: false,
+              icon: Icons.water_drop_outlined,
+            ),
+            const SystemStatusChip(
+              label: 'Local Weather',
+              status: 'Weather not connected',
+              ok: false,
+              icon: Icons.wb_cloudy_outlined,
+            ),
+          ];
+          final chips = Wrap(spacing: 8, runSpacing: 8, children: cards);
+          return AgriGlassCard(
+            padding: const EdgeInsets.all(14),
+            radius: 22,
+            elevated: false,
+            child: wide
+                ? Row(
+                    children: [
+                      Expanded(child: chips),
+                      const SizedBox(width: 12),
+                      _AskFieldButton(ref: ref),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      chips,
+                      const SizedBox(height: 12),
+                      _AskFieldButton(ref: ref),
+                    ],
+                  ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildMap(List<FlightPathPoint> points, Color Function(int) colorFor) {
     if (points.isEmpty) {
       return Center(
@@ -230,10 +317,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.location_off, color: AppColors.textFaint, size: 48.0),
+              const Icon(Icons.location_off,
+                  color: AppColors.textFaint, size: 48.0),
               const SizedBox(height: 16.0),
               Text(
-                'No geotagged captures found',
+                'No field locations yet',
                 style: GoogleFonts.spaceGrotesk(
                   color: AppColors.text,
                   fontSize: 15.0,
@@ -242,12 +330,24 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
               const SizedBox(height: 8.0),
               Text(
-                'Connect GPS flight telemetry or adjust map filters.',
+                'No field locations yet. GPS-linked crop images will appear here after a flight.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.spaceGrotesk(
                   color: AppColors.textFaint,
                   fontSize: 11.5,
                 ),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  ref.read(globalAiAdvisorProvider.notifier).open();
+                  ref.read(globalAiAdvisorProvider.notifier).sendMessage(
+                        'Where should I inspect first if field location is not available yet?',
+                        ref.read(aiAdvisorAppContextProvider),
+                      );
+                },
+                icon: const Icon(Icons.eco_rounded),
+                label: const Text('Ask AI Advisor'),
               ),
             ],
           ),
@@ -298,7 +398,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }).toList();
 
     // Auto-fit camera boundaries on the next frame
-    final bounds = LatLngBounds.fromPoints(points.map((p) => p.latLng).toList());
+    final bounds =
+        LatLngBounds.fromPoints(points.map((p) => p.latLng).toList());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && points.isNotEmpty) {
         _mapController.fitCamera(
@@ -330,14 +431,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.agridrone.guardian',
-              // Darken/invert tiles to align with the cyber-agri aesthetic
+              // Slightly soften the map tiles to fit the AgriDrone visual system.
               tileBuilder: (context, child, tile) {
                 return ColorFiltered(
                   colorFilter: const ColorFilter.matrix([
-                    -1, 0,  0,  0, 255,
-                     0,-1,  0,  0, 255,
-                     0, 0, -1,  0, 255,
-                     0, 0,  0,  1, 0,
+                    -1,
+                    0,
+                    0,
+                    0,
+                    255,
+                    0,
+                    -1,
+                    0,
+                    0,
+                    255,
+                    0,
+                    0,
+                    -1,
+                    0,
+                    255,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
                   ]),
                   child: child,
                 );
@@ -394,6 +511,27 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _AskFieldButton extends StatelessWidget {
+  final WidgetRef ref;
+
+  const _AskFieldButton({required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () {
+        ref.read(globalAiAdvisorProvider.notifier).open();
+        ref.read(globalAiAdvisorProvider.notifier).sendMessage(
+              'Ask what this field needs',
+              ref.read(aiAdvisorAppContextProvider),
+            );
+      },
+      icon: const Icon(Icons.eco_rounded),
+      label: const Text('Ask what this field needs'),
     );
   }
 }

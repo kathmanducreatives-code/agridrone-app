@@ -260,4 +260,128 @@ class SupabaseService {
       return [];
     }
   }
+
+  // ── Crop Campaigns (manual) ───────────────────────────────────────────────
+  // Backed by the `campaigns` / `campaign_images` tables. These have
+  // anon read/write policies, so direct inserts/updates are used.
+
+  /// Fetches all manual crop campaigns, newest first.
+  Future<List<Map<String, dynamic>>> getManualCampaigns() async {
+    final res = await _client
+        .from('campaigns')
+        .select()
+        .order('created_at', ascending: false);
+    return (res as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Fetches all currently-active campaign image links (removed_at is null).
+  Future<List<Map<String, dynamic>>> getActiveCampaignImages({
+    String? campaignId,
+  }) async {
+    var query =
+        _client.from('campaign_images').select().filter('removed_at', 'is', null);
+    if (campaignId != null) query = query.eq('campaign_id', campaignId);
+    final res = await query;
+    return (res as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Creates a manual campaign and returns the created row.
+  Future<Map<String, dynamic>> createManualCampaign({
+    required String name,
+    String? cropType,
+    String? fieldId,
+    String? fieldName,
+    String? notes,
+  }) async {
+    final res = await _client
+        .from('campaigns')
+        .insert({
+          'name': name,
+          'source': 'manual',
+          if (cropType != null && cropType.trim().isNotEmpty)
+            'crop_type': cropType.trim(),
+          if (fieldId != null) 'field_id': fieldId,
+          if (fieldName != null && fieldName.trim().isNotEmpty)
+            'field_name': fieldName.trim(),
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+          'status': 'active',
+        })
+        .select()
+        .single();
+    return res;
+  }
+
+  /// Assigns an existing real capture to a manual campaign (non-destructive to
+  /// the original capture).
+  Future<void> assignCaptureToCampaign({
+    required String campaignId,
+    required FlightCapture capture,
+  }) async {
+    await _client.from('campaign_images').insert({
+      'campaign_id': campaignId,
+      'capture_id': capture.id,
+      'image_url': capture.imageUrl,
+      'image_path': capture.imagePath,
+      'added_source': 'existing_capture',
+    });
+  }
+
+  /// Removes an image from a campaign without deleting the original capture
+  /// (soft delete via removed_at).
+  Future<void> removeCampaignImage(String campaignImageId) async {
+    await _client
+        .from('campaign_images')
+        .update({'removed_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('id', campaignImageId);
+  }
+
+  /// Permanently deletes a manual campaign and its image links.
+  Future<void> deleteManualCampaign(String campaignId) async {
+    await _client.from('campaigns').delete().eq('id', campaignId);
+  }
+
+  // ── Crop Reports ──────────────────────────────────────────────────────────
+  // Backed by the `reports` table (migration 0002), anon read/write.
+
+  /// Fetches all stored crop reports, newest first.
+  Future<List<Map<String, dynamic>>> getReports() async {
+    final res = await _client
+        .from('reports')
+        .select()
+        .order('created_at', ascending: false);
+    return (res as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Persists a generated crop report and returns the stored row.
+  Future<Map<String, dynamic>> saveReport({
+    required String reportType,
+    required String title,
+    String? reportMarkdown,
+    Map<String, dynamic>? reportJson,
+    String? campaignId,
+    String? flightId,
+    int? captureId,
+    String? fieldId,
+  }) async {
+    final res = await _client
+        .from('reports')
+        .insert({
+          'report_type': reportType,
+          'title': title,
+          if (reportMarkdown != null) 'report_markdown': reportMarkdown,
+          'report_json': reportJson ?? <String, dynamic>{},
+          if (campaignId != null) 'campaign_id': campaignId,
+          if (flightId != null) 'flight_id': flightId,
+          if (captureId != null) 'capture_id': captureId,
+          if (fieldId != null) 'field_id': fieldId,
+        })
+        .select()
+        .single();
+    return res;
+  }
+
+  /// Deletes a stored crop report.
+  Future<void> deleteReport(String reportId) async {
+    await _client.from('reports').delete().eq('id', reportId);
+  }
 }

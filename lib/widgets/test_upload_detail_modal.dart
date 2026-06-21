@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/ai_assistant_panel.dart';
+import '../models/ai_assistant.dart';
 import '../models/test_upload.dart';
 import '../models/test_detection.dart';
 import '../providers/test_upload_providers.dart';
@@ -50,7 +52,8 @@ class TestBboxPainter extends CustomPainter {
 
       if (showLabels) {
         final textSpan = TextSpan(
-          text: '${detection.displayLabel.toUpperCase()} ${detection.confidencePercent}',
+          text:
+              '${detection.displayLabel.toUpperCase()} ${detection.confidencePercent}',
           style: TextStyle(
             color: Colors.black,
             fontSize: size.width > 250 ? 10.0 : 8.0,
@@ -67,7 +70,8 @@ class TestBboxPainter extends CustomPainter {
         final labelHeight = textPainter.height + 4.0;
         final labelWidth = textPainter.width + 8.0;
 
-        final double labelY = (scaledY1 - labelHeight >= 0) ? (scaledY1 - labelHeight) : scaledY1;
+        final double labelY =
+            (scaledY1 - labelHeight >= 0) ? (scaledY1 - labelHeight) : scaledY1;
 
         final labelRect = Rect.fromLTWH(
           scaledX1,
@@ -89,7 +93,8 @@ class TestBboxPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant TestBboxPainter oldDelegate) {
-    return oldDelegate.detections != detections || oldDelegate.showLabels != showLabels;
+    return oldDelegate.detections != detections ||
+        oldDelegate.showLabels != showLabels;
   }
 }
 
@@ -113,7 +118,8 @@ class TestBboxOverlay extends StatelessWidget {
         child,
         Positioned.fill(
           child: CustomPaint(
-            painter: TestBboxPainter(detections: detections, showLabels: showLabels),
+            painter:
+                TestBboxPainter(detections: detections, showLabels: showLabels),
           ),
         ),
       ],
@@ -131,13 +137,45 @@ class TestUploadDetailModal extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<TestUploadDetailModal> createState() => _TestUploadDetailModalState();
+  ConsumerState<TestUploadDetailModal> createState() =>
+      _TestUploadDetailModalState();
 }
 
 class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
   bool _isLoading = false;
   List<TestDetection> _detections = [];
   String? _errorMessage;
+
+  AiDetectionContext? get _aiContext {
+    if (_detections.isEmpty) return null;
+    final primary = [..._detections]
+      ..sort((a, b) => b.confidence.compareTo(a.confidence));
+    final detection = primary.first;
+    final bbox = detection.bboxX1 != null &&
+            detection.bboxY1 != null &&
+            detection.bboxX2 != null &&
+            detection.bboxY2 != null
+        ? [
+            detection.bboxX1!,
+            detection.bboxY1!,
+            detection.bboxX2!,
+            detection.bboxY2!
+          ]
+        : null;
+    return AiDetectionContext(
+      diseaseName: detection.label,
+      confidence: detection.confidence,
+      severity: _severityFromConfidence(detection.confidence),
+      cropType: 'rice',
+      bbox: bbox,
+    );
+  }
+
+  String _severityFromConfidence(double confidence) {
+    if (confidence >= 0.80) return 'high';
+    if (confidence >= 0.50) return 'moderate';
+    return 'low';
+  }
 
   @override
   void initState() {
@@ -187,15 +225,22 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
       await service.requestAnalysis(widget.upload.id);
 
       // Trigger FastAPI prediction
-      final res = await ref.read(huggingFaceServiceProvider).predictForTestUpload(
-            imageUrl: widget.upload.imageUrl,
-            testUploadId: widget.upload.id,
-          );
+      final res =
+          await ref.read(huggingFaceServiceProvider).predictForTestUpload(
+                imageUrl: widget.upload.imageUrl,
+                testUploadId: widget.upload.id,
+              );
 
-      final count = res['detections_count'] ?? 0;
+      final rawDetections = res['detections'];
+      final count = res['detections_count'] is int
+          ? res['detections_count'] as int
+          : rawDetections is List
+              ? rawDetections.length
+              : 0;
 
       // Reload detections
-      final updatedDetections = await service.getDetectionsForUpload(widget.upload.id);
+      final updatedDetections =
+          await service.getDetectionsForUpload(widget.upload.id);
 
       if (mounted) {
         setState(() {
@@ -203,7 +248,11 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Re-analysis completed: $count detections found.'),
+            content: Text(
+              count == 0
+                  ? 'Analysis completed: no disease detections found.'
+                  : 'Re-analysis completed: $count detections found.',
+            ),
             backgroundColor: AppColors.greenDeep,
           ),
         );
@@ -235,20 +284,21 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text(
-          'DELETE TEST UPLOAD?',
+          'DELETE CROP CHECK?',
           style: GoogleFonts.spaceGrotesk(
             color: AppColors.crit,
             fontWeight: FontWeight.bold,
           ),
         ),
         content: Text(
-          'This action will permanently delete the database entry, all associated detections, and clean the storage file.',
+          'This action will permanently delete this crop image check and its saved results.',
           style: GoogleFonts.spaceGrotesk(color: AppColors.text),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(color: AppColors.textDim)),
+            child: Text('CANCEL',
+                style: GoogleFonts.spaceGrotesk(color: AppColors.textDim)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -256,7 +306,8 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
               backgroundColor: AppColors.crit,
               foregroundColor: Colors.white,
             ),
-            child: Text('DELETE', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
+            child: Text('DELETE',
+                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -268,11 +319,13 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
       });
 
       try {
-        await ref.read(testUploadServiceProvider).deleteTestUpload(widget.upload.id);
+        await ref
+            .read(testUploadServiceProvider)
+            .deleteTestUpload(widget.upload.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Test upload successfully deleted.'),
+              content: Text('Crop image check deleted.'),
               backgroundColor: AppColors.greenDeep,
             ),
           );
@@ -313,7 +366,8 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
         ? '${(widget.upload.imageSizeBytes! / (1024 * 1024)).toStringAsFixed(2)} MB'
         : 'Unknown size';
 
-    final timestampStr = widget.upload.uploadedAt.toLocal().toString().substring(0, 19);
+    final timestampStr =
+        widget.upload.uploadedAt.toLocal().toString().substring(0, 19);
 
     return Dialog.fullscreen(
       backgroundColor: AppColors.bg,
@@ -321,7 +375,8 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
         children: [
           // Header Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -367,10 +422,12 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
                               imageUrl: widget.upload.imageUrl,
                               fit: BoxFit.contain,
                               placeholder: (_, __) => const Center(
-                                child: CircularProgressIndicator(color: AppColors.green),
+                                child: CircularProgressIndicator(
+                                    color: AppColors.green),
                               ),
                               errorWidget: (_, __, ___) => const Center(
-                                child: Icon(Icons.broken_image, color: AppColors.crit, size: 48.0),
+                                child: Icon(Icons.broken_image,
+                                    color: AppColors.crit, size: 48.0),
                               ),
                             ),
                           ),
@@ -379,7 +436,8 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
                           Container(
                             color: Colors.black45,
                             child: const Center(
-                              child: CircularProgressIndicator(color: AppColors.green),
+                              child: CircularProgressIndicator(
+                                  color: AppColors.green),
                             ),
                           ),
                       ],
@@ -394,162 +452,206 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
                   child: Container(
                     color: AppColors.surface,
                     padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'UPLOAD LOGS',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: AppColors.textDim,
-                            fontSize: 12.0,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CROP CHECK DETAILS',
+                            style: GoogleFonts.spaceGrotesk(
+                              color: AppColors.textDim,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16.0),
-                        _buildSidebarField('UUID IDENTIFIER', widget.upload.uploadUuid),
-                        _buildSidebarField('FILE SIZE', sizeStr),
-                        _buildSidebarField('UPLOADED TIME', timestampStr),
-                        _buildSidebarField('OPERATOR', widget.upload.uploadedBy),
+                          const SizedBox(height: 16.0),
+                          _buildSidebarField(
+                              'UUID IDENTIFIER', widget.upload.uploadUuid),
+                          _buildSidebarField('FILE SIZE', sizeStr),
+                          _buildSidebarField('CHECKED TIME', timestampStr),
+                          _buildSidebarField(
+                              'OPERATOR', widget.upload.uploadedBy),
 
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16.0),
-                          child: Divider(color: AppColors.line),
-                        ),
-
-                        Text(
-                          'DETECTIONS REPORTED',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: AppColors.textDim,
-                            fontSize: 12.0,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16.0),
+                            child: Divider(color: AppColors.line),
                           ),
-                        ),
-                        const SizedBox(height: 12.0),
 
-                        Expanded(
-                          child: _errorMessage != null
-                              ? Center(
-                                  child: Text(
-                                    _errorMessage!,
-                                    style: const TextStyle(color: AppColors.crit, fontSize: 12.0),
-                                  ),
-                                )
-                              : _detections.isEmpty
-                                  ? const Center(
-                                      child: Text(
-                                        'No diseases detected.',
-                                        style: TextStyle(color: AppColors.textFaint, fontSize: 13.0),
-                                      ),
-                                    )
-                                  : ListView.builder(
-                                      itemCount: _detections.length,
-                                      itemBuilder: (context, index) {
-                                        final det = _detections[index];
-                                        final inferenceStr = det.inferenceTimeMs != null
-                                            ? '${det.inferenceTimeMs!.toStringAsFixed(0)}ms'
-                                            : 'N/A';
-                                        return Container(
-                                          margin: const EdgeInsets.only(bottom: 8.0),
-                                          padding: const EdgeInsets.all(8.0),
-                                          decoration: BoxDecoration(
-                                            color: det.color.withAlpha((255 * 0.05).toInt()),
-                                            borderRadius: BorderRadius.circular(6.0),
-                                            border: Border.all(color: det.color.withAlpha((255 * 0.20).toInt())),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    det.displayLabel,
-                                                    style: GoogleFonts.spaceGrotesk(
-                                                      color: det.color,
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 12.0,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2.0),
-                                                  Text(
-                                                    'Inference: $inferenceStr',
-                                                    style: GoogleFonts.spaceGrotesk(
-                                                      color: AppColors.textFaint,
-                                                      fontSize: 10.0,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              Text(
-                                                det.confidencePercent,
-                                                style: GoogleFonts.jetBrainsMono(
-                                                  color: AppColors.text,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 11.0,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
+                          Text(
+                            'DETECTIONS REPORTED',
+                            style: GoogleFonts.spaceGrotesk(
+                              color: AppColors.textDim,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 12.0),
+
+                          SizedBox(
+                            height: 180.0,
+                            child: _errorMessage != null
+                                ? Center(
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: const TextStyle(
+                                          color: AppColors.crit,
+                                          fontSize: 12.0),
                                     ),
-                        ),
+                                  )
+                                : _detections.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No diseases detected.',
+                                          style: TextStyle(
+                                              color: AppColors.textFaint,
+                                              fontSize: 13.0),
+                                        ),
+                                      )
+                                    : ListView.builder(
+                                        itemCount: _detections.length,
+                                        itemBuilder: (context, index) {
+                                          final det = _detections[index];
+                                          final inferenceStr = det
+                                                      .inferenceTimeMs !=
+                                                  null
+                                              ? '${det.inferenceTimeMs!.toStringAsFixed(0)}ms'
+                                              : 'N/A';
+                                          return Container(
+                                            margin: const EdgeInsets.only(
+                                                bottom: 8.0),
+                                            padding: const EdgeInsets.all(8.0),
+                                            decoration: BoxDecoration(
+                                              color: det.color.withAlpha(
+                                                  (255 * 0.05).toInt()),
+                                              borderRadius:
+                                                  BorderRadius.circular(6.0),
+                                              border: Border.all(
+                                                  color: det.color.withAlpha(
+                                                      (255 * 0.20).toInt())),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      det.displayLabel,
+                                                      style: GoogleFonts
+                                                          .spaceGrotesk(
+                                                        color: det.color,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 12.0,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2.0),
+                                                    Text(
+                                                      'Inference: $inferenceStr',
+                                                      style: GoogleFonts
+                                                          .spaceGrotesk(
+                                                        color:
+                                                            AppColors.textFaint,
+                                                        fontSize: 10.0,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                Text(
+                                                  det.confidencePercent,
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    color: AppColors.text,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 11.0,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                          ),
 
-                        const Divider(color: AppColors.line),
-                        const SizedBox(height: 16.0),
+                          const SizedBox(height: 12.0),
+                          SizedBox(
+                            height: 360.0,
+                            child: SingleChildScrollView(
+                              child: AiAssistantPanel(context: _aiContext),
+                            ),
+                          ),
 
-                        // Action Buttons Bar
-                        Column(
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _isLoading ? null : _forceReanalyze,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.green,
-                                foregroundColor: Colors.black,
-                                minimumSize: const Size.fromHeight(42.0),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                          const Divider(color: AppColors.line),
+                          const SizedBox(height: 16.0),
+
+                          // Action Buttons Bar
+                          Column(
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: _isLoading ? null : _forceReanalyze,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.green,
+                                  foregroundColor: Colors.black,
+                                  minimumSize: const Size.fromHeight(42.0),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8.0)),
+                                ),
+                                icon: const Icon(Icons.psychology_outlined,
+                                    size: 16.0),
+                                label: Text(
+                                  'CHECK AGAIN',
+                                  style: GoogleFonts.spaceGrotesk(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.0),
+                                ),
                               ),
-                              icon: const Icon(Icons.psychology_outlined, size: 16.0),
-                              label: Text(
-                                'FORCE RE-ANALYZE',
-                                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0),
+                              const SizedBox(height: 8.0),
+                              OutlinedButton.icon(
+                                onPressed: _copyUrl,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.text,
+                                  side: const BorderSide(
+                                      color: AppColors.lineBright),
+                                  minimumSize: const Size.fromHeight(42.0),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8.0)),
+                                ),
+                                icon: const Icon(Icons.copy_all, size: 16.0),
+                                label: Text(
+                                  'COPY URL',
+                                  style: GoogleFonts.spaceGrotesk(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.0),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8.0),
-                            OutlinedButton.icon(
-                              onPressed: _copyUrl,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.text,
-                                side: const BorderSide(color: AppColors.lineBright),
-                                minimumSize: const Size.fromHeight(42.0),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                              const SizedBox(height: 8.0),
+                              OutlinedButton.icon(
+                                onPressed: _isLoading ? null : _deleteUpload,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.crit,
+                                  side: const BorderSide(color: AppColors.crit),
+                                  minimumSize: const Size.fromHeight(42.0),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8.0)),
+                                ),
+                                icon: const Icon(Icons.delete_forever,
+                                    size: 16.0),
+                                label: Text(
+                                  'DELETE',
+                                  style: GoogleFonts.spaceGrotesk(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.0),
+                                ),
                               ),
-                              icon: const Icon(Icons.copy_all, size: 16.0),
-                              label: Text(
-                                'COPY URL',
-                                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0),
-                              ),
-                            ),
-                            const SizedBox(height: 8.0),
-                            OutlinedButton.icon(
-                              onPressed: _isLoading ? null : _deleteUpload,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.crit,
-                                side: const BorderSide(color: AppColors.crit),
-                                minimumSize: const Size.fromHeight(42.0),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                              ),
-                              icon: const Icon(Icons.delete_forever, size: 16.0),
-                              label: Text(
-                                'DELETE',
-                                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -569,12 +671,18 @@ class _TestUploadDetailModalState extends ConsumerState<TestUploadDetailModal> {
         children: [
           Text(
             label,
-            style: GoogleFonts.spaceGrotesk(color: AppColors.textFaint, fontSize: 9.0, fontWeight: FontWeight.bold),
+            style: GoogleFonts.spaceGrotesk(
+                color: AppColors.textFaint,
+                fontSize: 9.0,
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 2.0),
           Text(
             value,
-            style: GoogleFonts.jetBrainsMono(color: AppColors.text, fontSize: 11.5, fontWeight: FontWeight.bold),
+            style: GoogleFonts.jetBrainsMono(
+                color: AppColors.text,
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold),
           ),
         ],
       ),

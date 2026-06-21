@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "agri-web",
+      "runtimeExecutable": "/Users/prasidha/flutter/bin/flutter",
+      "runtimeArgs": ["run", "-d", "web-server", "--web-port", "8090", "--dart-define=AGRIDRONE_AI_BASE_URL=http://127.0.0.1:8001"],
+      "port": 8090
+    }
+  ]
+}

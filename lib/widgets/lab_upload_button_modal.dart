@@ -14,7 +14,8 @@ class LabUploadButtonModal extends ConsumerStatefulWidget {
   const LabUploadButtonModal({super.key});
 
   @override
-  ConsumerState<LabUploadButtonModal> createState() => _LabUploadButtonModalState();
+  ConsumerState<LabUploadButtonModal> createState() =>
+      _LabUploadButtonModalState();
 }
 
 class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
@@ -40,7 +41,8 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
 
     for (int i = 0; i < _files.length; i++) {
       final file = _files[i];
-      if (file.status == UploadStatus.complete || file.status == UploadStatus.failed) {
+      if (file.status == UploadStatus.complete ||
+          file.status == UploadStatus.failed) {
         continue;
       }
 
@@ -113,13 +115,13 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Curation batch processing complete.'),
+          content: Text('Crop image batch processing complete.'),
           backgroundColor: AppColors.greenDeep,
         ),
       );
 
-      // Auto-navigate to Test AI tab (index 1)
-      ref.read(currentTabProvider.notifier).set(1);
+      // Auto-navigate back to Crop Images after the batch finishes.
+      ref.read(currentTabProvider.notifier).set(3);
 
       // Close the modal
       Navigator.pop(context);
@@ -133,7 +135,8 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
     return Dialog(
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
       child: Container(
         width: 500.0,
         padding: const EdgeInsets.all(20.0),
@@ -146,7 +149,7 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'UPLOAD FOR AI TESTING',
+                  'CHECK CROP IMAGES',
                   style: GoogleFonts.spaceGrotesk(
                     color: AppColors.text,
                     fontSize: 14.0,
@@ -155,7 +158,8 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.textDim, size: 18.0),
+                  icon: const Icon(Icons.close,
+                      color: AppColors.textDim, size: 18.0),
                   onPressed: _isAnalyzing ? null : () => Navigator.pop(context),
                 ),
               ],
@@ -172,7 +176,7 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
             // Picked Files Preview Box
             if (hasPending) ...[
               Text(
-                'PREVIEW SELECTION (${_files.length} Files)',
+                'READY TO CHECK (${_files.length} Files)',
                 style: GoogleFonts.spaceGrotesk(
                   color: AppColors.textDim,
                   fontSize: 10.0,
@@ -193,12 +197,16 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
                   itemCount: _files.length,
                   itemBuilder: (context, index) {
                     final file = _files[index];
-                    final sizeMB = (file.sizeBytes / (1024 * 1024)).toStringAsFixed(2);
+                    final sizeMB =
+                        (file.sizeBytes / (1024 * 1024)).toStringAsFixed(2);
 
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12.0, vertical: 8.0),
                       decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: AppColors.line, width: 0.5)),
+                        border: Border(
+                            bottom:
+                                BorderSide(color: AppColors.line, width: 0.5)),
                       ),
                       child: Row(
                         children: [
@@ -254,12 +262,16 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
                 ),
                 const SizedBox(width: 12.0),
                 ElevatedButton(
-                  onPressed: (!hasPending || _isAnalyzing) ? null : _startSequentialAnalysis,
+                  onPressed: (!hasPending || _isAnalyzing)
+                      ? null
+                      : _startSequentialAnalysis,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.green,
                     foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8.0)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0, vertical: 12.0),
                   ),
                   child: _isAnalyzing
                       ? const SizedBox(
@@ -271,7 +283,7 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
                           ),
                         )
                       : Text(
-                          'ANALYZE & VIEW',
+                          'CHECK & VIEW',
                           style: GoogleFonts.spaceGrotesk(
                             fontWeight: FontWeight.bold,
                             fontSize: 12.0,
@@ -289,18 +301,21 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
   Widget _buildStatusIndicator(PendingFile file) {
     switch (file.status) {
       case UploadStatus.queued:
-        return const Icon(Icons.schedule_outlined, color: AppColors.textFaint, size: 16.0);
+        return const Icon(Icons.schedule_outlined,
+            color: AppColors.textFaint, size: 16.0);
       case UploadStatus.uploading:
         return const SizedBox(
           width: 14.0,
           height: 14.0,
-          child: CircularProgressIndicator(color: AppColors.green, strokeWidth: 1.5),
+          child: CircularProgressIndicator(
+              color: AppColors.green, strokeWidth: 1.5),
         );
       case UploadStatus.analyzing:
         return const SizedBox(
           width: 14.0,
           height: 14.0,
-          child: CircularProgressIndicator(color: AppColors.info, strokeWidth: 1.5),
+          child: CircularProgressIndicator(
+              color: AppColors.info, strokeWidth: 1.5),
         );
       case UploadStatus.complete:
         final count = file.detections?.length ?? 0;
@@ -310,9 +325,12 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
             const Icon(Icons.check_circle, color: AppColors.green, size: 16.0),
             const SizedBox(width: 4.0),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
               decoration: BoxDecoration(
-                color: count > 0 ? AppColors.crit.withAlpha((255 * 0.15).toInt()) : AppColors.greenDeep.withAlpha((255 * 0.15).toInt()),
+                color: count > 0
+                    ? AppColors.crit.withAlpha((255 * 0.15).toInt())
+                    : AppColors.greenDeep.withAlpha((255 * 0.15).toInt()),
                 borderRadius: BorderRadius.circular(4.0),
                 border: Border.all(
                   color: count > 0 ? AppColors.crit : AppColors.green,
@@ -320,7 +338,7 @@ class _LabUploadButtonModalState extends ConsumerState<LabUploadButtonModal> {
                 ),
               ),
               child: Text(
-                '$count DET',
+                count > 0 ? 'DISEASE FOUND' : 'HEALTHY',
                 style: GoogleFonts.jetBrainsMono(
                   color: count > 0 ? AppColors.crit : AppColors.green,
                   fontSize: 8.5,

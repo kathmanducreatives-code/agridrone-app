@@ -8,7 +8,7 @@ import '../theme/app_colors.dart';
 import '../providers/test_upload_providers.dart';
 
 /// Reusable dashed-border interactive picker zone.
-/// Combines file picker actions with the dark cyber-agri aesthetic.
+/// Combines file picker actions with the light AgriDrone visual system.
 class UploadDropzone extends StatefulWidget {
   final void Function(List<PendingFile>) onFilesPicked;
   final bool compact;
@@ -90,18 +90,23 @@ class _UploadDropzoneState extends State<UploadDropzone> {
                   : AppColors.glass,
               borderRadius: BorderRadius.circular(14.0),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  widget.compact ? Icons.cloud_upload_outlined : Icons.drive_folder_upload,
+                  widget.compact
+                      ? Icons.cloud_upload_outlined
+                      : Icons.drive_folder_upload,
                   color: _isHovered ? AppColors.green : AppColors.textDim,
                   size: widget.compact ? 28.0 : 42.0,
                 ),
                 const SizedBox(height: 10.0),
                 Text(
-                  widget.compact ? 'TAP TO BROWSE' : 'DRAG IMAGES HERE OR CLICK TO BROWSE',
+                  widget.compact
+                      ? 'TAP TO BROWSE'
+                      : 'DRAG IMAGES HERE OR CLICK TO BROWSE',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.spaceGrotesk(
                     color: AppColors.text,

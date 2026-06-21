@@ -12,7 +12,8 @@ import '../screens/analytics_screen.dart'; // contains LabDetailsModal
 import '../widgets/glass_card.dart';
 
 /// Provider querying crop detections recorded on a specific capture point.
-final captureDetectionsProvider = FutureProvider.family<List<Detection>, int>((ref, captureId) async {
+final captureDetectionsProvider =
+    FutureProvider.family<List<Detection>, int>((ref, captureId) async {
   return ref.watch(supabaseServiceProvider).getDetectionsForCapture(captureId);
 });
 
@@ -29,7 +30,8 @@ class MarkerPopupCard extends ConsumerWidget {
     required this.onOpenDetail,
   });
 
-  void _showCurationDetails(BuildContext context, WidgetRef ref, List<Detection> detections) {
+  void _showCurationDetails(
+      BuildContext context, WidgetRef ref, List<Detection> detections) {
     // Dynamically build a FlightCapture from the FlightPathPoint
     final capture = FlightCapture(
       id: point.captureId,
@@ -55,7 +57,8 @@ class MarkerPopupCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detectionsAsync = ref.watch(captureDetectionsProvider(point.captureId));
+    final detectionsAsync =
+        ref.watch(captureDetectionsProvider(point.captureId));
     final String imageUrl = point.imageUrl ?? '';
 
     return GlassCard(
@@ -79,7 +82,8 @@ class MarkerPopupCard extends ConsumerWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close_rounded, color: AppColors.textDim, size: 16.0),
+                icon: const Icon(Icons.close_rounded,
+                    color: AppColors.textDim, size: 16.0),
                 onPressed: onClose,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -103,11 +107,13 @@ class MarkerPopupCard extends ConsumerWidget {
                           imageUrl: imageUrl,
                           fit: BoxFit.cover,
                           placeholder: (_, __) => const Center(
-                            child: CircularProgressIndicator(color: AppColors.green, strokeWidth: 1.5),
+                            child: CircularProgressIndicator(
+                                color: AppColors.green, strokeWidth: 1.5),
                           ),
                           errorWidget: (_, __, ___) => Container(
                             color: AppColors.surface,
-                            child: const Icon(Icons.broken_image, color: AppColors.textFaint, size: 24.0),
+                            child: const Icon(Icons.broken_image,
+                                color: AppColors.textFaint, size: 24.0),
                           ),
                         )
                       : Container(color: AppColors.surface),
@@ -146,9 +152,11 @@ class MarkerPopupCard extends ConsumerWidget {
                       data: (detections) {
                         if (detections.isEmpty) {
                           return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5.0, vertical: 2.0),
                             decoration: BoxDecoration(
-                              color: AppColors.greenSoft.withAlpha((255 * 0.12).toInt()),
+                              color: AppColors.greenSoft
+                                  .withAlpha((255 * 0.12).toInt()),
                               borderRadius: BorderRadius.circular(4.0),
                             ),
                             child: Text(
@@ -168,11 +176,15 @@ class MarkerPopupCard extends ConsumerWidget {
                           runSpacing: 4.0,
                           children: detections.map((d) {
                             return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5.0, vertical: 2.0),
                               decoration: BoxDecoration(
                                 color: d.color.withAlpha((255 * 0.12).toInt()),
                                 borderRadius: BorderRadius.circular(4.0),
-                                border: Border.all(color: d.color.withAlpha((255 * 0.35).toInt()), width: 0.5),
+                                border: Border.all(
+                                    color:
+                                        d.color.withAlpha((255 * 0.35).toInt()),
+                                    width: 0.5),
                               ),
                               child: Text(
                                 d.displayLabel.toUpperCase(),
@@ -189,11 +201,13 @@ class MarkerPopupCard extends ConsumerWidget {
                       loading: () => const SizedBox(
                         height: 10.0,
                         width: 10.0,
-                        child: CircularProgressIndicator(color: AppColors.green, strokeWidth: 1.0),
+                        child: CircularProgressIndicator(
+                            color: AppColors.green, strokeWidth: 1.0),
                       ),
                       error: (err, _) => Text(
                         'Failed to load threat reports',
-                        style: GoogleFonts.spaceGrotesk(color: AppColors.crit, fontSize: 9.0),
+                        style: GoogleFonts.spaceGrotesk(
+                            color: AppColors.crit, fontSize: 9.0),
                       ),
                     ),
                   ],
@@ -214,12 +228,13 @@ class MarkerPopupCard extends ConsumerWidget {
                 backgroundColor: AppColors.green,
                 foregroundColor: Colors.black,
                 minimumSize: const Size.fromHeight(36.0),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6.0)),
                 padding: EdgeInsets.zero,
               ),
               icon: const Icon(Icons.open_in_new, size: 14.0),
               label: Text(
-                'OPEN FULL CURATION ENVELOPE',
+                'OPEN DIAGNOSIS DETAIL',
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 10.5,
                   fontWeight: FontWeight.bold,

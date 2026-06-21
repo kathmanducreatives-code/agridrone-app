@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import 'login_screen.dart';
 
-/// Splash screen that renders a pulsing cyber-agricultural seal for 1.8 seconds.
+/// Splash screen for the AgriDrone Guardian crop-health assistant.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -11,7 +11,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _pulseAnimation;
 
@@ -22,7 +23,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 0.25, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
@@ -64,12 +65,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       color: AppColors.green.withAlpha((255 * 0.05).toInt()),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: AppColors.green.withAlpha((255 * _pulseAnimation.value * 0.25).toInt()),
+                        color: AppColors.green.withAlpha(
+                            (255 * _pulseAnimation.value * 0.25).toInt()),
                         width: 2.0,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.green.withAlpha((255 * _pulseAnimation.value * 0.15).toInt()),
+                          color: AppColors.green.withAlpha(
+                              (255 * _pulseAnimation.value * 0.15).toInt()),
                           blurRadius: 20.0,
                           spreadRadius: 2.0,
                         ),
@@ -97,12 +100,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             ),
             const SizedBox(height: 8),
             Text(
-              'CYBERNETIC IoT + AI CURATION',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+              'AI crop-health assistant',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
                 color: AppColors.textDim,
-                letterSpacing: 2.0,
+                letterSpacing: 0.2,
               ),
             ),
             const SizedBox(height: 64),

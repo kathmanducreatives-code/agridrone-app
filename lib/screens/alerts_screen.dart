@@ -39,7 +39,8 @@ class DismissedAlertsNotifier extends Notifier<Set<String>> {
 }
 
 /// Provider containing active dismissed alerts.
-final dismissedAlertsProvider = NotifierProvider<DismissedAlertsNotifier, Set<String>>(
+final dismissedAlertsProvider =
+    NotifierProvider<DismissedAlertsNotifier, Set<String>>(
   DismissedAlertsNotifier.new,
 );
 
@@ -60,14 +61,15 @@ final derivedAlertsProvider = Provider<AsyncValue<List<DerivedAlert>>>((ref) {
               final List<DerivedAlert> alerts = [];
               final now = DateTime.now();
 
-              // Rule 1: Curation backlog (pending review count > 20)
+              // Rule 1: many images waiting for review.
               final pendingCount = pendingCountAsync.value ?? 0;
               if (pendingCount > 20) {
                 alerts.add(
                   DerivedAlert(
-                    id: 'curation_backlog',
-                    title: 'Curation queue backlog warning',
-                    body: 'You have $pendingCount drone images awaiting review. Head to Lab to filter and trigger analysis.',
+                    id: 'image_review_backlog',
+                    title: 'Review waiting crop images',
+                    body:
+                        'You have $pendingCount crop images waiting. Open Crop Images to check them and decide what needs action.',
                     severity: 'WARNING',
                     timestamp: now,
                   ),
@@ -77,12 +79,14 @@ final derivedAlertsProvider = Provider<AsyncValue<List<DerivedAlert>>>((ref) {
               // Rule 2: High-confidence disease detection in last hour
               final oneHourAgo = now.subtract(const Duration(hours: 1));
               for (final det in detections) {
-                if (det.confidence > 0.85 && det.detectedAt.isAfter(oneHourAgo)) {
+                if (det.confidence > 0.85 &&
+                    det.detectedAt.isAfter(oneHourAgo)) {
                   alerts.add(
                     DerivedAlert(
                       id: 'high_conf_${det.id}',
-                      title: 'Confirmed ${det.displayLabel} in FLT_${det.flightId.toString().padLeft(4, '0')}',
-                      body: 'Infection confirmed with ${(det.confidence * 100).toStringAsFixed(1)}% confidence at index #${det.imageIndex}.',
+                      title: 'Disease found: ${det.displayLabel}',
+                      body:
+                          'Image #${det.imageIndex} has a high-confidence crop issue. Review the diagnosis and recommendation.',
                       severity: 'CRITICAL',
                       timestamp: det.detectedAt,
                     ),
@@ -99,8 +103,9 @@ final derivedAlertsProvider = Provider<AsyncValue<List<DerivedAlert>>>((ref) {
                   alerts.add(
                     DerivedAlert(
                       id: 'stuck_analysis_${cap.id}',
-                      title: 'Analysis stalled in FLT_${cap.flightId}',
-                      body: 'Image index #${cap.imageIndex} request has been pending for over 2 minutes. FastAPI worker may be slow.',
+                      title: 'Crop image check is taking longer than expected',
+                      body:
+                          'Image #${cap.imageIndex} has been waiting for more than two minutes. Try again or ask the AI Advisor what to check next.',
                       severity: 'WARNING',
                       timestamp: cap.analysisRequestedAt!,
                     ),
@@ -109,13 +114,15 @@ final derivedAlertsProvider = Provider<AsyncValue<List<DerivedAlert>>>((ref) {
               }
 
               // Rule 4: Disease density alert (> 3 detections of same label in one flight)
-              final densityMap = <String, int>{}; // Key format: 'flightId_label'
+              final densityMap =
+                  <String, int>{}; // Key format: 'flightId_label'
               final densityOldest = <String, DateTime>{};
               for (final det in detections) {
                 final key = '${det.flightId}_${det.label}';
                 densityMap[key] = (densityMap[key] ?? 0) + 1;
                 final currentOldest = densityOldest[key];
-                if (currentOldest == null || det.detectedAt.isBefore(currentOldest)) {
+                if (currentOldest == null ||
+                    det.detectedAt.isBefore(currentOldest)) {
                   densityOldest[key] = det.detectedAt;
                 }
               }
@@ -123,14 +130,14 @@ final derivedAlertsProvider = Provider<AsyncValue<List<DerivedAlert>>>((ref) {
               densityMap.forEach((key, count) {
                 if (count > 3) {
                   final parts = key.split('_');
-                  final flightId = parts[0];
                   final label = parts.sublist(1).join('_');
                   final cleanLabel = label.replaceAll('_', ' ');
                   alerts.add(
                     DerivedAlert(
                       id: 'density_$key',
-                      title: 'Disease density alert in FLT_${flightId.padLeft(4, '0')}',
-                      body: 'Identified $count instances of $cleanLabel during flight $flightId. High risk of disease spreading.',
+                      title: 'Disease may be spreading in one field area',
+                      body:
+                          'Found $count images showing $cleanLabel during the same flight. Inspect nearby plants soon.',
                       severity: 'CRITICAL',
                       timestamp: densityOldest[key] ?? now,
                     ),
@@ -140,17 +147,23 @@ final derivedAlertsProvider = Provider<AsyncValue<List<DerivedAlert>>>((ref) {
 
               // Rule 5: Coverage gap (if no captures uploaded in last 24 hours)
               if (captures.isNotEmpty) {
-                final validTimes = captures.map((c) => c.uploadedAt).where((t) => t != null).cast<DateTime>();
+                final validTimes = captures
+                    .map((c) => c.uploadedAt)
+                    .where((t) => t != null)
+                    .cast<DateTime>();
                 if (validTimes.isNotEmpty) {
-                  final latestUpload = validTimes.reduce((a, b) => a.isAfter(b) ? a : b);
-                  final twentyFourHoursAgo = now.subtract(const Duration(hours: 24));
+                  final latestUpload =
+                      validTimes.reduce((a, b) => a.isAfter(b) ? a : b);
+                  final twentyFourHoursAgo =
+                      now.subtract(const Duration(hours: 24));
                   if (latestUpload.isBefore(twentyFourHoursAgo)) {
                     final hours = now.difference(latestUpload).inHours;
                     alerts.add(
                       DerivedAlert(
                         id: 'coverage_gap',
-                        title: 'No recent drone activity',
-                        body: 'No captures sync log found in Supabase in the last $hours hours. Verify hardware sync profiles.',
+                        title: 'No recent crop images',
+                        body:
+                            'No new crop images have arrived in the last $hours hours. Capture or upload a fresh image if you need today’s advice.',
                         severity: 'WARNING',
                         timestamp: latestUpload,
                       ),
@@ -160,7 +173,8 @@ final derivedAlertsProvider = Provider<AsyncValue<List<DerivedAlert>>>((ref) {
               }
 
               // Filter out resolved alerts and sort descending
-              final activeAlerts = alerts.where((a) => !dismissed.contains(a.id)).toList();
+              final activeAlerts =
+                  alerts.where((a) => !dismissed.contains(a.id)).toList();
               activeAlerts.sort((a, b) => b.timestamp.compareTo(a.timestamp));
               return AsyncValue.data(activeAlerts);
             },
@@ -210,7 +224,7 @@ class AlertsScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'WARNING LOG DIRECTORY',
+                        'ACTION PLAN',
                         style: GoogleFonts.spaceGrotesk(
                           color: AppColors.text,
                           fontSize: 20.0,
@@ -220,8 +234,8 @@ class AlertsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4.0),
                       Text(
-                        'DIAGNOSED DIAGNOSTICS & SYSTEM WARNINGS',
-                        style: GoogleFonts.jetBrainsMono(
+                        'Clear next steps for your farm today',
+                        style: GoogleFonts.spaceGrotesk(
                           color: AppColors.textDim,
                           fontSize: 10.0,
                         ),
@@ -230,7 +244,9 @@ class AlertsScreen extends ConsumerWidget {
                   ),
                   if (dismissedCount > 0)
                     TextButton(
-                      onPressed: () => ref.read(dismissedAlertsProvider.notifier).restoreAll(),
+                      onPressed: () => ref
+                          .read(dismissedAlertsProvider.notifier)
+                          .restoreAll(),
                       child: Text(
                         'RESTORE ALL',
                         style: GoogleFonts.spaceGrotesk(
@@ -253,10 +269,11 @@ class AlertsScreen extends ConsumerWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.verified_outlined, size: 48.0, color: AppColors.green),
+                            const Icon(Icons.verified_outlined,
+                                size: 48.0, color: AppColors.green),
                             const SizedBox(height: 16.0),
                             Text(
-                              'ALL SYSTEMS CLEAN',
+                              'No urgent crop actions',
                               style: GoogleFonts.spaceGrotesk(
                                 color: AppColors.text,
                                 fontSize: 16.0,
@@ -266,8 +283,9 @@ class AlertsScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 4.0),
                             Text(
-                              'No threat backlog, density errors, or queue delays detected currently.',
-                              style: GoogleFonts.spaceGrotesk(color: AppColors.textDim, fontSize: 13.0),
+                              'No urgent actions today. Your farm looks stable.',
+                              style: GoogleFonts.spaceGrotesk(
+                                  color: AppColors.textDim, fontSize: 13.0),
                               textAlign: TextAlign.center,
                             ),
                           ],
@@ -286,9 +304,11 @@ class AlertsScreen extends ConsumerWidget {
                       },
                     );
                   },
-                  loading: () => const Center(child: CircularProgressIndicator(color: AppColors.green)),
+                  loading: () => const Center(
+                      child: CircularProgressIndicator(color: AppColors.green)),
                   error: (err, stack) => Center(
-                    child: Text('Error loading warnings: $err', style: const TextStyle(color: AppColors.crit)),
+                    child: Text('Could not load action plan: $err',
+                        style: const TextStyle(color: AppColors.crit)),
                   ),
                 ),
               ),
@@ -299,7 +319,8 @@ class AlertsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAlertCard(BuildContext context, WidgetRef ref, DerivedAlert alert) {
+  Widget _buildAlertCard(
+      BuildContext context, WidgetRef ref, DerivedAlert alert) {
     Color severityColor = AppColors.green;
     IconData severityIcon = Icons.check_circle_outline_rounded;
     if (alert.severity == 'CRITICAL') {
@@ -321,7 +342,9 @@ class AlertsScreen extends ConsumerWidget {
             decoration: BoxDecoration(
               color: severityColor.withAlpha((255 * 0.1).toInt()),
               borderRadius: BorderRadius.circular(8.0),
-              border: Border.all(color: severityColor.withAlpha((255 * 0.2).toInt()), width: 1.0),
+              border: Border.all(
+                  color: severityColor.withAlpha((255 * 0.2).toInt()),
+                  width: 1.0),
             ),
             child: Icon(severityIcon, color: severityColor, size: 20.0),
           ),
@@ -334,14 +357,19 @@ class AlertsScreen extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6.0, vertical: 2.0),
                       decoration: BoxDecoration(
                         color: severityColor.withAlpha((255 * 0.1).toInt()),
                         borderRadius: BorderRadius.circular(4.0),
                         border: Border.all(color: severityColor, width: 0.5),
                       ),
                       child: Text(
-                        alert.severity,
+                        alert.severity == 'CRITICAL'
+                            ? 'URGENT'
+                            : alert.severity == 'WARNING'
+                                ? 'NEEDS ACTION'
+                                : 'INFO',
                         style: GoogleFonts.spaceGrotesk(
                           color: severityColor,
                           fontSize: 8.5,
@@ -380,17 +408,22 @@ class AlertsScreen extends ConsumerWidget {
                 Align(
                   alignment: Alignment.bottomRight,
                   child: ElevatedButton(
-                    onPressed: () => ref.read(dismissedAlertsProvider.notifier).dismiss(alert.id),
+                    onPressed: () => ref
+                        .read(dismissedAlertsProvider.notifier)
+                        .dismiss(alert.id),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.surface,
                       foregroundColor: AppColors.text,
                       side: const BorderSide(color: AppColors.line),
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12.0, vertical: 8.0),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6.0)),
                     ),
                     child: Text(
-                      'RESOLVE',
-                      style: GoogleFonts.spaceGrotesk(fontSize: 10.0, fontWeight: FontWeight.bold),
+                      'MARK DONE',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 10.0, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),

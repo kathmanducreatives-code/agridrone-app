@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-/// Reusable Glassmorphism card widget with BackdropFilter blur and custom border/glow states.
+/// Reusable light glassmorphism card widget with soft SaaS depth.
 class GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -33,12 +33,20 @@ class GlassCard extends StatelessWidget {
         boxShadow: bright
             ? [
                 BoxShadow(
-                  color: AppColors.green.withAlpha((255 * 0.35).toInt()),
-                  blurRadius: 12.0,
-                  spreadRadius: -2.0,
+                  color: AppColors.greenDeep.withAlpha((255 * 0.10).toInt()),
+                  blurRadius: 24.0,
+                  offset: const Offset(0, 12),
+                  spreadRadius: -6.0,
                 )
               ]
-            : null,
+            : [
+                BoxShadow(
+                  color: AppColors.greenDeep.withAlpha((255 * 0.06).toInt()),
+                  blurRadius: 18.0,
+                  offset: const Offset(0, 10),
+                  spreadRadius: -8.0,
+                ),
+              ],
       ),
       child: child,
     );

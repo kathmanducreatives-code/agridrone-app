@@ -3,6 +3,7 @@ onnx==1.17.0
 onnxruntime==1.19.2
 fastapi
 uvicorn
+httpx
 python-multipart
 requests
 firebase-admin

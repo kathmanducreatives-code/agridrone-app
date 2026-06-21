@@ -6,7 +6,7 @@ import '../theme/app_colors.dart';
 import '../widgets/glass_card.dart';
 import 'main_navigation_screen.dart';
 
-/// Single-tenant operator sign-in screen designed in a dark cyber aesthetic.
+/// Single-tenant sign-in screen for the crop-health workspace.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -61,7 +61,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         color: AppColors.green.withAlpha((255 * 0.05).toInt()),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.green.withAlpha((255 * 0.15).toInt()),
+                          color:
+                              AppColors.green.withAlpha((255 * 0.15).toInt()),
                           width: 1.0,
                         ),
                       ),
@@ -83,9 +84,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Operator console — single tenant prototype',
-                      style: GoogleFonts.jetBrainsMono(
+                      'AI crop-health workspace for drone teams',
+                      style: GoogleFonts.spaceGrotesk(
                         fontSize: 12,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textDim,
                       ),
                     ),
@@ -115,22 +117,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _emailCtrl,
-                        style: GoogleFonts.jetBrainsMono(color: AppColors.text, fontSize: 14),
+                        style: GoogleFonts.jetBrainsMono(
+                            color: AppColors.text, fontSize: 14),
                         keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
                           hintText: 'operator@agridrone.io',
-                          hintStyle: GoogleFonts.jetBrainsMono(fontSize: 14, color: AppColors.textFaint),
-                          prefixIcon: const Icon(Icons.mail_outline, size: 20, color: AppColors.textDim),
+                          hintStyle: GoogleFonts.jetBrainsMono(
+                              fontSize: 14, color: AppColors.textFaint),
+                          prefixIcon: const Icon(Icons.mail_outline,
+                              size: 20, color: AppColors.textDim),
                           filled: true,
                           fillColor: AppColors.surface,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: const BorderSide(color: AppColors.line),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: AppColors.green, width: 1.5),
+                            borderSide: const BorderSide(
+                                color: AppColors.green, width: 1.5),
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -138,12 +145,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           focusedErrorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: AppColors.crit, width: 1.5),
+                            borderSide: const BorderSide(
+                                color: AppColors.crit, width: 1.5),
                           ),
                         ),
                         validator: (v) {
-                          if (v == null || v.isEmpty) return 'Please enter your email';
-                          if (!v.contains('@')) return 'Please enter a valid email';
+                          if (v == null || v.isEmpty) {
+                            return 'Please enter your email';
+                          }
+                          if (!v.contains('@')) {
+                            return 'Please enter a valid email';
+                          }
                           return null;
                         },
                       ),
@@ -161,30 +173,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _passwordCtrl,
-                        style: GoogleFonts.jetBrainsMono(color: AppColors.text, fontSize: 14),
+                        style: GoogleFonts.jetBrainsMono(
+                            color: AppColors.text, fontSize: 14),
                         obscureText: _obscureText,
                         decoration: InputDecoration(
                           hintText: '••••••••',
-                          hintStyle: GoogleFonts.jetBrainsMono(fontSize: 14, color: AppColors.textFaint),
-                          prefixIcon: const Icon(Icons.lock_outlined, size: 20, color: AppColors.textDim),
+                          hintStyle: GoogleFonts.jetBrainsMono(
+                              fontSize: 14, color: AppColors.textFaint),
+                          prefixIcon: const Icon(Icons.lock_outlined,
+                              size: 20, color: AppColors.textDim),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              _obscureText
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
                               size: 20,
                               color: AppColors.textDim,
                             ),
-                            onPressed: () => setState(() => _obscureText = !_obscureText),
+                            onPressed: () =>
+                                setState(() => _obscureText = !_obscureText),
                           ),
                           filled: true,
                           fillColor: AppColors.surface,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: const BorderSide(color: AppColors.line),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: AppColors.green, width: 1.5),
+                            borderSide: const BorderSide(
+                                color: AppColors.green, width: 1.5),
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -192,12 +212,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           focusedErrorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: AppColors.crit, width: 1.5),
+                            borderSide: const BorderSide(
+                                color: AppColors.crit, width: 1.5),
                           ),
                         ),
                         validator: (v) {
-                          if (v == null || v.isEmpty) return 'Please enter your password';
-                          if (v.length < 6) return 'Password must be at least 6 characters';
+                          if (v == null || v.isEmpty) {
+                            return 'Please enter your password';
+                          }
+                          if (v.length < 6) {
+                            return 'Password must be at least 6 characters';
+                          }
                           return null;
                         },
                       ),
@@ -208,7 +233,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: _submit,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.green,
-                          foregroundColor: Colors.black,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -216,7 +241,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           elevation: 0,
                         ),
                         child: Text(
-                          'SIGN IN',
+                          'Open Crop Dashboard',
                           style: GoogleFonts.spaceGrotesk(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,

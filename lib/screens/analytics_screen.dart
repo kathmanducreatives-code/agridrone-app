@@ -10,13 +10,16 @@ import '../widgets/gallery_tile.dart';
 import '../widgets/bbox_overlay.dart';
 import '../widgets/detection_card.dart';
 import '../widgets/lab_upload_button_modal.dart';
+import '../widgets/ai_assistant_panel.dart';
+import '../models/ai_assistant.dart';
+import 'diagnosis_detail_screen.dart';
 import '../models/flight_capture.dart';
 import '../models/detection.dart';
 import '../providers/flight_providers.dart';
 import '../providers/lab_providers.dart';
 import '../providers/analysis_providers.dart';
 
-/// Curation Cabinet and Lab Gallery Screen managing image review, blur-rejection, and AI sequential executions.
+/// Crop image library for review, image quality decisions, and crop checks.
 class AnalyticsScreen extends ConsumerWidget {
   const AnalyticsScreen({super.key});
 
@@ -24,7 +27,8 @@ class AnalyticsScreen extends ConsumerWidget {
     ref.read(selectedCapturesProvider.notifier).toggle(captureId);
   }
 
-  void _openDetailsModal(BuildContext context, WidgetRef ref, FlightCapture capture, List<Detection> detections) {
+  void _openDetailsModal(BuildContext context, WidgetRef ref,
+      FlightCapture capture, List<Detection> detections) {
     showDialog(
       context: context,
       barrierColor: Colors.black.withAlpha((255 * 0.85).toInt()),
@@ -35,28 +39,34 @@ class AnalyticsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _rejectSelected(BuildContext context, WidgetRef ref, List<FlightCapture> selectedList) async {
+  Future<void> _rejectSelected(BuildContext context, WidgetRef ref,
+      List<FlightCapture> selectedList) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text(
-          'REJECT ${selectedList.length} CAPTURES?',
-          style: GoogleFonts.spaceGrotesk(color: AppColors.rejected, fontWeight: FontWeight.bold),
+          'MARK ${selectedList.length} IMAGES AS NEEDING RETAKE?',
+          style: GoogleFonts.spaceGrotesk(
+              color: AppColors.rejected, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          'These images will be flagged as blurry and hidden from the review gallery by default.',
+          'These images will be marked as needing a better image and hidden from the main gallery by default.',
           style: GoogleFonts.spaceGrotesk(color: AppColors.text),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(color: AppColors.textDim)),
+            child: Text('CANCEL',
+                style: GoogleFonts.spaceGrotesk(color: AppColors.textDim)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.rejected, foregroundColor: Colors.white),
-            child: Text('CONFIRM REJECT', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.rejected,
+                foregroundColor: Colors.white),
+            child: Text('MARK NEEDS RETAKE',
+                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -71,20 +81,23 @@ class AnalyticsScreen extends ConsumerWidget {
           debugPrint('[AgriDrone] Error rejecting capture ${cap.id}: $e');
         }
       }
+      if (!context.mounted) return;
       ref.read(selectedCapturesProvider.notifier).clear();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Successfully rejected ${selectedList.length} blurry captures.'),
+          content: Text(
+              'Marked ${selectedList.length} images as needing a better image.'),
           backgroundColor: AppColors.greenDeep,
         ),
       );
     }
   }
 
-  void _analyzeSelected(BuildContext context, WidgetRef ref, List<FlightCapture> selectedList) {
+  void _analyzeSelected(
+      BuildContext context, WidgetRef ref, List<FlightCapture> selectedList) {
     // Reset progressive status tracker
     ref.read(analysisProgressProvider.notifier).reset();
-    
+
     // Open Sequential Progress Modal overlay
     showDialog(
       context: context,
@@ -121,11 +134,12 @@ class AnalyticsScreen extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // 1. Curation Filters & Actions Bar
+            // 1. Crop image filters and actions.
             GlassCard(
               bright: false,
               borderRadius: 0.0,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -134,7 +148,7 @@ class AnalyticsScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'LAB CURATION GRID',
+                        'CROP IMAGES',
                         style: GoogleFonts.spaceGrotesk(
                           color: AppColors.text,
                           fontSize: 16.0,
@@ -148,18 +162,26 @@ class AnalyticsScreen extends ConsumerWidget {
                             onPressed: () => _openUploadModal(context),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.green,
-                              side: const BorderSide(color: AppColors.lineBright),
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                              side:
+                                  const BorderSide(color: AppColors.lineBright),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12.0, vertical: 8.0),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6.0)),
                             ),
                             icon: const Icon(Icons.upload_file, size: 14.0),
-                            label: Text('UPLOAD', style: GoogleFonts.spaceGrotesk(fontSize: 10.0, fontWeight: FontWeight.bold)),
+                            label: Text('UPLOAD IMAGE',
+                                style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 10.0,
+                                    fontWeight: FontWeight.bold)),
                           ),
                           const SizedBox(width: 8.0),
                           TextButton(
                             onPressed: () {
                               filterNotifier.reset();
-                              ref.read(selectedCapturesProvider.notifier).clear();
+                              ref
+                                  .read(selectedCapturesProvider.notifier)
+                                  .clear();
                             },
                             child: Text(
                               'RESET FILTERS',
@@ -184,7 +206,8 @@ class AnalyticsScreen extends ConsumerWidget {
                         child: flightsAsync.maybeWhen(
                           data: (flightsList) {
                             return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12.0),
                               decoration: BoxDecoration(
                                 color: AppColors.surface,
                                 borderRadius: BorderRadius.circular(8.0),
@@ -196,25 +219,33 @@ class AnalyticsScreen extends ConsumerWidget {
                                   dropdownColor: AppColors.surface,
                                   hint: Text(
                                     'All Flights',
-                                    style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 13.0),
+                                    style: GoogleFonts.spaceGrotesk(
+                                        color: AppColors.text, fontSize: 13.0),
                                   ),
                                   items: [
                                     DropdownMenuItem<int?>(
                                       value: null,
                                       child: Text(
                                         'All Flights',
-                                        style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 13.0),
+                                        style: GoogleFonts.spaceGrotesk(
+                                            color: AppColors.text,
+                                            fontSize: 13.0),
                                       ),
                                     ),
-                                    ...flightsList.map((f) => DropdownMenuItem<int?>(
-                                          value: f.flightId,
-                                          child: Text(
-                                            'Flight FLT_${f.flightId.toString().padLeft(4, '0')}',
-                                            style: GoogleFonts.jetBrainsMono(color: AppColors.text, fontSize: 13.0),
-                                          ),
-                                        )),
+                                    ...flightsList
+                                        .map((f) => DropdownMenuItem<int?>(
+                                              value: f.flightId,
+                                              child: Text(
+                                                'Flight FLT_${f.flightId.toString().padLeft(4, '0')}',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                        color: AppColors.text,
+                                                        fontSize: 13.0),
+                                              ),
+                                            )),
                                   ],
-                                  onChanged: (id) => filterNotifier.setFlightId(id),
+                                  onChanged: (id) =>
+                                      filterNotifier.setFlightId(id),
                                 ),
                               ),
                             );
@@ -240,22 +271,35 @@ class AnalyticsScreen extends ConsumerWidget {
                               items: [
                                 DropdownMenuItem(
                                   value: 'pending',
-                                  child: Text('Pending Review', style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 13.0)),
+                                  child: Text('Needs Review',
+                                      style: GoogleFonts.spaceGrotesk(
+                                          color: AppColors.text,
+                                          fontSize: 13.0)),
                                 ),
                                 DropdownMenuItem(
                                   value: 'all',
-                                  child: Text('All Captures', style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 13.0)),
+                                  child: Text('All Images',
+                                      style: GoogleFonts.spaceGrotesk(
+                                          color: AppColors.text,
+                                          fontSize: 13.0)),
                                 ),
                                 DropdownMenuItem(
                                   value: 'analyzed',
-                                  child: Text('Analyzed Only', style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 13.0)),
+                                  child: Text('Checked Only',
+                                      style: GoogleFonts.spaceGrotesk(
+                                          color: AppColors.text,
+                                          fontSize: 13.0)),
                                 ),
                                 DropdownMenuItem(
                                   value: 'rejected',
-                                  child: Text('Rejected Only', style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 13.0)),
+                                  child: Text('Rejected Only',
+                                      style: GoogleFonts.spaceGrotesk(
+                                          color: AppColors.text,
+                                          fontSize: 13.0)),
                                 ),
                               ],
-                              onChanged: (mode) => filterNotifier.setViewMode(mode ?? 'pending'),
+                              onChanged: (mode) =>
+                                  filterNotifier.setViewMode(mode ?? 'pending'),
                             ),
                           ),
                         ),
@@ -272,15 +316,17 @@ class AnalyticsScreen extends ConsumerWidget {
                         children: [
                           Switch(
                             value: filter.showRejected,
-                            activeTrackColor: AppColors.green.withAlpha((255 * 0.15).toInt()),
+                            activeTrackColor:
+                                AppColors.green.withAlpha((255 * 0.15).toInt()),
                             activeThumbColor: AppColors.green,
                             inactiveTrackColor: AppColors.surface,
                             inactiveThumbColor: AppColors.textFaint,
-                            onChanged: (_) => filterNotifier.toggleShowRejected(),
+                            onChanged: (_) =>
+                                filterNotifier.toggleShowRejected(),
                           ),
                           const SizedBox(width: 8.0),
                           Text(
-                            'SHOW REJECTED BLURRY IMAGES',
+                            'SHOW IMAGES THAT NEED RETAKE',
                             style: GoogleFonts.spaceGrotesk(
                               color: AppColors.textFaint,
                               fontSize: 9.0,
@@ -296,19 +342,22 @@ class AnalyticsScreen extends ConsumerWidget {
               ),
             ),
 
-            // 2. Active Curation Actions Strip (Visible when selectedIds count > 0)
+            // 2. Active review actions strip (visible when selectedIds count > 0)
             if (selectedIds.isNotEmpty) ...[
               capturesAsync.maybeWhen(
                 data: (capturesList) {
-                  final curSelectedList = capturesList.where((c) => selectedIds.contains(c.id)).toList();
+                  final curSelectedList = capturesList
+                      .where((c) => selectedIds.contains(c.id))
+                      .toList();
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0, vertical: 10.0),
                     color: AppColors.surface2,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '${selectedIds.length} SELECTED FOR CURATION',
+                          '${selectedIds.length} IMAGES SELECTED',
                           style: GoogleFonts.spaceGrotesk(
                             color: AppColors.selected,
                             fontWeight: FontWeight.bold,
@@ -318,27 +367,41 @@ class AnalyticsScreen extends ConsumerWidget {
                         Row(
                           children: [
                             OutlinedButton.icon(
-                              onPressed: () => _rejectSelected(context, ref, curSelectedList),
+                              onPressed: () => _rejectSelected(
+                                  context, ref, curSelectedList),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.rejected,
-                                side: const BorderSide(color: AppColors.rejected),
-                                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                                side:
+                                    const BorderSide(color: AppColors.rejected),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12.0, vertical: 8.0),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6.0)),
                               ),
                               icon: const Icon(Icons.close_rounded, size: 14.0),
-                              label: Text('REJECT BLURRY', style: GoogleFonts.spaceGrotesk(fontSize: 10.0, fontWeight: FontWeight.bold)),
+                              label: Text('NEEDS RETAKE',
+                                  style: GoogleFonts.spaceGrotesk(
+                                      fontSize: 10.0,
+                                      fontWeight: FontWeight.bold)),
                             ),
                             const SizedBox(width: 10.0),
                             ElevatedButton.icon(
-                              onPressed: () => _analyzeSelected(context, ref, curSelectedList),
+                              onPressed: () => _analyzeSelected(
+                                  context, ref, curSelectedList),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.green,
                                 foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14.0, vertical: 8.0),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6.0)),
                               ),
-                              icon: const Icon(Icons.play_arrow_rounded, size: 14.0),
-                              label: Text('ANALYZE ${selectedIds.length}', style: GoogleFonts.spaceGrotesk(fontSize: 10.0, fontWeight: FontWeight.bold)),
+                              icon: const Icon(Icons.play_arrow_rounded,
+                                  size: 14.0),
+                              label: Text('CHECK ${selectedIds.length}',
+                                  style: GoogleFonts.spaceGrotesk(
+                                      fontSize: 10.0,
+                                      fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -359,11 +422,23 @@ class AnalyticsScreen extends ConsumerWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.photo_library_outlined, color: AppColors.textFaint, size: 48.0),
+                          const Icon(Icons.photo_library_outlined,
+                              color: AppColors.textFaint, size: 48.0),
                           const SizedBox(height: 16.0),
                           Text(
-                            'No captures match criteria filters.',
-                            style: GoogleFonts.spaceGrotesk(color: AppColors.textDim, fontSize: 14.0),
+                            'No crop images match these filters.',
+                            style: GoogleFonts.spaceGrotesk(
+                                color: AppColors.textDim, fontSize: 14.0),
+                          ),
+                          const SizedBox(height: 14.0),
+                          ElevatedButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => DiagnosisDetailScreen.demo(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.auto_awesome_rounded),
+                            label: const Text('Use Sample Diagnosis'),
                           ),
                         ],
                       ),
@@ -395,23 +470,28 @@ class AnalyticsScreen extends ConsumerWidget {
                         itemBuilder: (context, index) {
                           final cap = captures[index];
                           final detectionsList = detectionsAsync.value ?? [];
-                          final capDetections = detectionsList.where((d) => d.flightCaptureId == cap.id).toList();
+                          final capDetections = detectionsList
+                              .where((d) => d.flightCaptureId == cap.id)
+                              .toList();
 
                           return GalleryTile(
                             capture: cap,
                             isSelected: selectedIds.contains(cap.id),
                             detections: capDetections,
                             onTap: () => _toggleSelection(ref, cap.id),
-                            onLongPress: () => _openDetailsModal(context, ref, cap, capDetections),
+                            onLongPress: () => _openDetailsModal(
+                                context, ref, cap, capDetections),
                           );
                         },
                       );
                     },
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator(color: AppColors.green)),
+                loading: () => const Center(
+                    child: CircularProgressIndicator(color: AppColors.green)),
                 error: (err, stack) => Center(
-                  child: Text('Error: $err', style: const TextStyle(color: AppColors.crit)),
+                  child: Text('Error: $err',
+                      style: const TextStyle(color: AppColors.crit)),
                 ),
               ),
             ),
@@ -440,14 +520,53 @@ class LabDetailsModal extends ConsumerStatefulWidget {
 class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
   bool _curating = false;
 
+  AiDetectionContext? get _aiContext {
+    if (widget.detections.isEmpty) return null;
+    final primary = [...widget.detections]
+      ..sort((a, b) => b.confidence.compareTo(a.confidence));
+    final detection = primary.first;
+    final bbox = detection.bboxX1 != null &&
+            detection.bboxY1 != null &&
+            detection.bboxX2 != null &&
+            detection.bboxY2 != null
+        ? [
+            detection.bboxX1!,
+            detection.bboxY1!,
+            detection.bboxX2!,
+            detection.bboxY2!
+          ]
+        : null;
+    return AiDetectionContext(
+      captureId: widget.capture.id.toString(),
+      detectionId: detection.id.toString(),
+      flightId: widget.capture.flightId.toString(),
+      diseaseName: detection.label,
+      confidence: detection.confidence,
+      severity: _severityFromConfidence(detection.confidence),
+      cropType: 'rice',
+      moisturePct: widget.capture.moisturePct,
+      bbox: bbox,
+    );
+  }
+
+  String _severityFromConfidence(double confidence) {
+    if (confidence >= 0.80) return 'high';
+    if (confidence >= 0.50) return 'moderate';
+    return 'low';
+  }
+
   Future<void> _updateCuration(bool rejected) async {
     setState(() => _curating = true);
     try {
-      await ref.read(supabaseServiceProvider).markReviewed(widget.capture.id, rejected: rejected);
+      await ref
+          .read(supabaseServiceProvider)
+          .markReviewed(widget.capture.id, rejected: rejected);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(rejected ? 'Capture marked rejected.' : 'Capture selected for analysis list.'),
+            content: Text(rejected
+                ? 'Image marked as needing a better image.'
+                : 'Image is ready for crop health checking.'),
             backgroundColor: AppColors.greenDeep,
           ),
         );
@@ -456,7 +575,9 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Curation failed: $e'), backgroundColor: AppColors.crit),
+          SnackBar(
+              content: Text('Image update failed: $e'),
+              backgroundColor: AppColors.crit),
         );
       }
     } finally {
@@ -467,21 +588,32 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
   Future<void> _forceAnalysis() async {
     setState(() => _curating = true);
     try {
-      await ref.read(supabaseServiceProvider).requestAnalysis(widget.capture.id);
-      
-      final res = await ref.read(huggingFaceServiceProvider).predict(
-        imageUrl: widget.capture.imageUrl ?? '',
-        flightCaptureId: widget.capture.id,
-        flightId: widget.capture.flightId,
-        imageIndex: widget.capture.imageIndex,
-      );
+      await ref
+          .read(supabaseServiceProvider)
+          .requestAnalysis(widget.capture.id);
 
-      final count = res['detections_count'] ?? 0;
+      final res = await ref.read(huggingFaceServiceProvider).predict(
+            imageUrl: widget.capture.imageUrl ?? '',
+            flightCaptureId: widget.capture.id,
+            flightId: widget.capture.flightId,
+            imageIndex: widget.capture.imageIndex,
+          );
+
+      final rawDetections = res['detections'];
+      final count = res['detections_count'] is int
+          ? res['detections_count'] as int
+          : rawDetections is List
+              ? rawDetections.length
+              : 0;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Re-analysis completed: $count detections recorded.'),
-            backgroundColor: AppColors.green,
+            content: Text(
+              count == 0
+                  ? 'Analysis completed: no disease detections found.'
+                  : 'Re-analysis completed: $count detections recorded.',
+            ),
+            backgroundColor: count == 0 ? AppColors.greenDeep : AppColors.green,
           ),
         );
         Navigator.pop(context);
@@ -489,7 +621,9 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Analysis failed: $e'), backgroundColor: AppColors.crit),
+          SnackBar(
+              content: Text('Analysis failed: $e'),
+              backgroundColor: AppColors.crit),
         );
       }
     } finally {
@@ -500,7 +634,9 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
   void _copyUrl() {
     Clipboard.setData(ClipboardData(text: widget.capture.imageUrl ?? ''));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Public URL copied to clipboard'), backgroundColor: AppColors.greenDeep),
+      const SnackBar(
+          content: Text('Public URL copied to clipboard'),
+          backgroundColor: AppColors.greenDeep),
     );
   }
 
@@ -514,7 +650,8 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
         children: [
           // Modal Top Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -554,10 +691,12 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
                               imageUrl: imageUrl,
                               fit: BoxFit.contain,
                               placeholder: (_, __) => const Center(
-                                child: CircularProgressIndicator(color: AppColors.green),
+                                child: CircularProgressIndicator(
+                                    color: AppColors.green),
                               ),
                               errorWidget: (_, __, ___) => const Center(
-                                child: Icon(Icons.broken_image, color: AppColors.crit, size: 48.0),
+                                child: Icon(Icons.broken_image,
+                                    color: AppColors.crit, size: 48.0),
                               ),
                             )
                           : const SizedBox.shrink(),
@@ -572,155 +711,228 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
                   child: Container(
                     color: AppColors.surface,
                     padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'FILE & TELEMETRY LOGS',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: AppColors.textDim,
-                            fontSize: 12.0,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'FILE & TELEMETRY LOGS',
+                            style: GoogleFonts.spaceGrotesk(
+                              color: AppColors.textDim,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16.0),
-                        _buildSidebarLabelValue('DEVICE IDENTIFIER', widget.capture.deviceId),
-                        _buildSidebarLabelValue('CAPTURED TIMESTAMP', widget.capture.uploadedAt != null ? widget.capture.uploadedAt!.toLocal().toString().substring(11, 19) : '—'),
-                        _buildSidebarLabelValue('SOIL MOISTURE READING', widget.capture.moisturePct != null ? '${widget.capture.moisturePct!.toStringAsFixed(1)}%' : 'N/A'),
-                        
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16.0),
-                          child: Divider(color: AppColors.line),
-                        ),
+                          const SizedBox(height: 16.0),
+                          _buildSidebarLabelValue(
+                              'DEVICE IDENTIFIER', widget.capture.deviceId),
+                          _buildSidebarLabelValue(
+                              'CAPTURED TIMESTAMP',
+                              widget.capture.uploadedAt != null
+                                  ? widget.capture.uploadedAt!
+                                      .toLocal()
+                                      .toString()
+                                      .substring(11, 19)
+                                  : '—'),
+                          _buildSidebarLabelValue(
+                              'SOIL MOISTURE READING',
+                              widget.capture.moisturePct != null
+                                  ? '${widget.capture.moisturePct!.toStringAsFixed(1)}%'
+                                  : 'N/A'),
 
-                        Text(
-                          'DISEASES LOGGED',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: AppColors.textDim,
-                            fontSize: 12.0,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16.0),
+                            child: Divider(color: AppColors.line),
                           ),
-                        ),
-                        const SizedBox(height: 12.0),
 
-                        Expanded(
-                          child: widget.detections.isEmpty
+                          Text(
+                            'DISEASES LOGGED',
+                            style: GoogleFonts.spaceGrotesk(
+                              color: AppColors.textDim,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 12.0),
+
+                          SizedBox(
+                            height: 150.0,
+                            child: widget.detections.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'No infections verified currently.',
+                                      style: TextStyle(
+                                          color: AppColors.textFaint,
+                                          fontSize: 13.0),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    itemCount: widget.detections.length,
+                                    itemBuilder: (context, index) {
+                                      final det = widget.detections[index];
+                                      return Container(
+                                        margin:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        padding: const EdgeInsets.all(8.0),
+                                        decoration: BoxDecoration(
+                                          color: det.color
+                                              .withAlpha((255 * 0.05).toInt()),
+                                          borderRadius:
+                                              BorderRadius.circular(6.0),
+                                          border: Border.all(
+                                              color: det.color.withAlpha(
+                                                  (255 * 0.25).toInt())),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                det.displayLabel,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.spaceGrotesk(
+                                                  color: det.color,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12.0,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8.0),
+                                            Text(
+                                              det.confidencePercent,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                color: AppColors.text,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11.0,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+
+                          const SizedBox(height: 12.0),
+                          SizedBox(
+                            height: 360.0,
+                            child: SingleChildScrollView(
+                              child: AiAssistantPanel(context: _aiContext),
+                            ),
+                          ),
+
+                          const Divider(color: AppColors.line),
+                          const SizedBox(height: 16.0),
+
+                          // Curation Operations Controls
+                          _curating
                               ? const Center(
-                                  child: Text(
-                                    'No infections verified currently.',
-                                    style: TextStyle(color: AppColors.textFaint, fontSize: 13.0),
+                                  child: Padding(
+                                    padding:
+                                        EdgeInsets.symmetric(vertical: 12.0),
+                                    child: CircularProgressIndicator(
+                                        color: AppColors.green),
                                   ),
                                 )
-                              : ListView.builder(
-                                  itemCount: widget.detections.length,
-                                  itemBuilder: (context, index) {
-                                    final det = widget.detections[index];
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 8.0),
-                                      padding: const EdgeInsets.all(8.0),
-                                      decoration: BoxDecoration(
-                                        color: det.color.withAlpha((255 * 0.05).toInt()),
-                                        borderRadius: BorderRadius.circular(6.0),
-                                        border: Border.all(color: det.color.withAlpha((255 * 0.25).toInt())),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            det.displayLabel,
-                                            style: GoogleFonts.spaceGrotesk(
-                                              color: det.color,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12.0,
+                              : Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () =>
+                                                _updateCuration(true),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor:
+                                                  AppColors.rejected,
+                                              side: const BorderSide(
+                                                  color: AppColors.rejected),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          8.0)),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 12.0),
                                             ),
+                                            child: Text('NEEDS RETAKE',
+                                                style: GoogleFonts.spaceGrotesk(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 12.0)),
                                           ),
-                                          Text(
-                                            det.confidencePercent,
-                                            style: GoogleFonts.jetBrainsMono(
-                                              color: AppColors.text,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 11.0,
+                                        ),
+                                        const SizedBox(width: 8.0),
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed: () =>
+                                                _updateCuration(false),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.green,
+                                              foregroundColor: Colors.black,
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          8.0)),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 12.0),
                                             ),
+                                            child: Text('SELECT',
+                                                style: GoogleFonts.spaceGrotesk(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 12.0)),
                                           ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                        ),
-
-                        const Divider(color: AppColors.line),
-                        const SizedBox(height: 16.0),
-
-                        // Curation Operations Controls
-                        _curating
-                            ? const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 12.0),
-                                  child: CircularProgressIndicator(color: AppColors.green),
-                                ),
-                              )
-                            : Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton(
-                                          onPressed: () => _updateCuration(true),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: AppColors.rejected,
-                                            side: const BorderSide(color: AppColors.rejected),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                                            padding: const EdgeInsets.symmetric(vertical: 12.0),
-                                          ),
-                                          child: Text('REJECT', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0)),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8.0),
-                                      Expanded(
-                                        child: ElevatedButton(
-                                          onPressed: () => _updateCuration(false),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.green,
-                                            foregroundColor: Colors.black,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                                            padding: const EdgeInsets.symmetric(vertical: 12.0),
-                                          ),
-                                          child: Text('SELECT', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0)),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10.0),
-                                  ElevatedButton.icon(
-                                    onPressed: _forceAnalysis,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.surface2,
-                                      foregroundColor: AppColors.text,
-                                      side: const BorderSide(color: AppColors.line),
-                                      minimumSize: const Size.fromHeight(44.0),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                      ],
                                     ),
-                                    icon: const Icon(Icons.rocket_launch, size: 16.0),
-                                    label: Text('FORCE RE-ANALYZE', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0)),
-                                  ),
-                                  const SizedBox(height: 8.0),
-                                  OutlinedButton.icon(
-                                    onPressed: _copyUrl,
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppColors.text,
-                                      side: const BorderSide(color: AppColors.lineBright),
-                                      minimumSize: const Size.fromHeight(44.0),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                    const SizedBox(height: 10.0),
+                                    ElevatedButton.icon(
+                                      onPressed: _forceAnalysis,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.surface2,
+                                        foregroundColor: AppColors.text,
+                                        side: const BorderSide(
+                                            color: AppColors.line),
+                                        minimumSize:
+                                            const Size.fromHeight(44.0),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8.0)),
+                                      ),
+                                      icon: const Icon(Icons.rocket_launch,
+                                          size: 16.0),
+                                      label: Text('CHECK AGAIN',
+                                          style: GoogleFonts.spaceGrotesk(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12.0)),
                                     ),
-                                    icon: const Icon(Icons.copy_all_outlined, size: 16.0),
-                                    label: Text('COPY IMAGE URL', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 12.0)),
-                                  ),
-                                ],
-                              ),
-                      ],
+                                    const SizedBox(height: 8.0),
+                                    OutlinedButton.icon(
+                                      onPressed: _copyUrl,
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppColors.text,
+                                        side: const BorderSide(
+                                            color: AppColors.lineBright),
+                                        minimumSize:
+                                            const Size.fromHeight(44.0),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8.0)),
+                                      ),
+                                      icon: const Icon(Icons.copy_all_outlined,
+                                          size: 16.0),
+                                      label: Text('COPY IMAGE URL',
+                                          style: GoogleFonts.spaceGrotesk(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12.0)),
+                                    ),
+                                  ],
+                                ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -740,12 +952,18 @@ class _LabDetailsModalState extends ConsumerState<LabDetailsModal> {
         children: [
           Text(
             label,
-            style: GoogleFonts.spaceGrotesk(color: AppColors.textFaint, fontSize: 9.0, fontWeight: FontWeight.bold),
+            style: GoogleFonts.spaceGrotesk(
+                color: AppColors.textFaint,
+                fontSize: 9.0,
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 2.0),
           Text(
             value,
-            style: GoogleFonts.jetBrainsMono(color: AppColors.text, fontSize: 12.0, fontWeight: FontWeight.bold),
+            style: GoogleFonts.jetBrainsMono(
+                color: AppColors.text,
+                fontSize: 12.0,
+                fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -766,14 +984,17 @@ class AnalysisProgressModal extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final progress = ref.watch(analysisProgressProvider);
 
-    final double completionRatio = progress.total == 0 ? 0.0 : (progress.completed + progress.failed) / progress.total;
+    final double completionRatio = progress.total == 0
+        ? 0.0
+        : (progress.completed + progress.failed) / progress.total;
 
-    return WillPopScope(
-      onWillPop: () async => progress.isComplete, // Block popping until loop finishes
+    return PopScope(
+      canPop: progress.isComplete, // Block popping until loop finishes
       child: Dialog(
         backgroundColor: AppColors.surface,
         insetPadding: const EdgeInsets.all(20.0),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18.0)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18.0)),
         child: Container(
           width: 550.0,
           padding: const EdgeInsets.all(24.0),
@@ -826,7 +1047,8 @@ class AnalysisProgressModal extends ConsumerWidget {
                   value: completionRatio,
                   minHeight: 8.0,
                   backgroundColor: AppColors.surface2,
-                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.green),
+                  valueColor:
+                      const AlwaysStoppedAnimation<Color>(AppColors.green),
                 ),
               ),
               const SizedBox(height: 12.0),
@@ -835,8 +1057,10 @@ class AnalysisProgressModal extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildMiniSummaryText('COMPLETED', progress.completed.toString(), AppColors.green),
-                  _buildMiniSummaryText('FAILED', progress.failed.toString(), AppColors.crit),
+                  _buildMiniSummaryText('COMPLETED',
+                      progress.completed.toString(), AppColors.green),
+                  _buildMiniSummaryText(
+                      'FAILED', progress.failed.toString(), AppColors.crit),
                 ],
               ),
               const Padding(
@@ -869,12 +1093,15 @@ class AnalysisProgressModal extends ConsumerWidget {
                                   padding: const EdgeInsets.all(10.0),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.error_outline, color: AppColors.crit),
+                                      const Icon(Icons.error_outline,
+                                          color: AppColors.crit),
                                       const SizedBox(width: 12.0),
                                       Expanded(
                                         child: Text(
-                                          'Capture FLT_${cap.flightId} #${cap.imageIndex} failed: ${res['error']}',
-                                          style: GoogleFonts.spaceGrotesk(color: AppColors.crit, fontSize: 11.0),
+                                          'Crop image FLT_${cap.flightId} #${cap.imageIndex} needs attention: ${res['error']}',
+                                          style: GoogleFonts.spaceGrotesk(
+                                              color: AppColors.crit,
+                                              fontSize: 11.0),
                                           maxLines: 2,
                                         ),
                                       ),
@@ -886,7 +1113,10 @@ class AnalysisProgressModal extends ConsumerWidget {
 
                             // Prepare mock or actual joined detections to display
                             final List rawDets = res['detections'] ?? [];
-                            final detections = rawDets.map((d) => Detection.fromJson({...d, 'image_url': cap.imageUrl})).toList();
+                            final detections = rawDets
+                                .map((d) => Detection.fromJson(
+                                    {...d, 'image_url': cap.imageUrl}))
+                                .toList();
 
                             if (detections.isEmpty) {
                               return Padding(
@@ -895,11 +1125,14 @@ class AnalysisProgressModal extends ConsumerWidget {
                                   padding: const EdgeInsets.all(10.0),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.check_circle_outline, color: AppColors.green),
+                                      const Icon(Icons.check_circle_outline,
+                                          color: AppColors.green),
                                       const SizedBox(width: 12.0),
                                       Text(
-                                        'Capture FLT_${cap.flightId} #${cap.imageIndex}: Clean Canopy verified',
-                                        style: GoogleFonts.spaceGrotesk(color: AppColors.text, fontSize: 12.0),
+                                        'Crop image FLT_${cap.flightId} #${cap.imageIndex}: no disease found',
+                                        style: GoogleFonts.spaceGrotesk(
+                                            color: AppColors.text,
+                                            fontSize: 12.0),
                                       ),
                                     ],
                                   ),
@@ -911,7 +1144,9 @@ class AnalysisProgressModal extends ConsumerWidget {
                               padding: const EdgeInsets.only(bottom: 10.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: detections.map((d) => DetectionCard(detection: d)).toList(),
+                                children: detections
+                                    .map((d) => DetectionCard(detection: d))
+                                    .toList(),
                               ),
                             );
                           },
@@ -928,11 +1163,13 @@ class AnalysisProgressModal extends ConsumerWidget {
                     backgroundColor: AppColors.green,
                     foregroundColor: Colors.black,
                     minimumSize: const Size.fromHeight(48.0),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8.0)),
                   ),
                   child: Text(
                     'CLOSE CABINET',
-                    style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 13.0),
+                    style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.bold, fontSize: 13.0),
                   ),
                 ),
               ],
@@ -948,11 +1185,15 @@ class AnalysisProgressModal extends ConsumerWidget {
       children: [
         Text(
           '$label: ',
-          style: GoogleFonts.spaceGrotesk(color: AppColors.textFaint, fontSize: 10.0, fontWeight: FontWeight.bold),
+          style: GoogleFonts.spaceGrotesk(
+              color: AppColors.textFaint,
+              fontSize: 10.0,
+              fontWeight: FontWeight.bold),
         ),
         Text(
           value,
-          style: GoogleFonts.jetBrainsMono(color: color, fontSize: 11.0, fontWeight: FontWeight.bold),
+          style: GoogleFonts.jetBrainsMono(
+              color: color, fontSize: 11.0, fontWeight: FontWeight.bold),
         ),
       ],
     );

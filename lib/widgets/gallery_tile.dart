@@ -47,7 +47,7 @@ class GalleryTile extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      transform: Matrix4.identity()..scale(scale),
+      transform: Matrix4.identity()..scaleByDouble(scale, scale, scale, 1.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18.0),
         border: Border.all(color: borderColor, width: borderWidth),
@@ -75,14 +75,16 @@ class GalleryTile extends StatelessWidget {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.0,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.green),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppColors.green),
                               ),
                             ),
                           ),
                         ),
                         errorWidget: (_, __, ___) => Container(
                           color: AppColors.surface2,
-                          child: const Icon(Icons.broken_image, color: AppColors.crit),
+                          child: const Icon(Icons.broken_image,
+                              color: AppColors.crit),
                         ),
                       )
                     : Container(color: AppColors.surface),
@@ -156,11 +158,14 @@ class GalleryTile extends StatelessWidget {
                               children: detections.map((d) {
                                 return Container(
                                   margin: const EdgeInsets.only(right: 4.0),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 1.0),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0, vertical: 1.0),
                                   decoration: BoxDecoration(
-                                    color: d.color.withAlpha((255 * 0.15).toInt()),
+                                    color:
+                                        d.color.withAlpha((255 * 0.15).toInt()),
                                     borderRadius: BorderRadius.circular(4.0),
-                                    border: Border.all(color: d.color, width: 0.5),
+                                    border:
+                                        Border.all(color: d.color, width: 0.5),
                                   ),
                                   child: Center(
                                     child: Text(
@@ -197,22 +202,26 @@ class GalleryTile extends StatelessWidget {
     if (isSelected) {
       return Container(
         padding: const EdgeInsets.all(4.0),
-        decoration: const BoxDecoration(color: AppColors.selected, shape: BoxShape.circle),
+        decoration: const BoxDecoration(
+            color: AppColors.selected, shape: BoxShape.circle),
         child: const Icon(Icons.check, color: Colors.black, size: 12.0),
       );
     }
     if (isRejected) {
       return Container(
         padding: const EdgeInsets.all(4.0),
-        decoration: const BoxDecoration(color: AppColors.rejected, shape: BoxShape.circle),
+        decoration: const BoxDecoration(
+            color: AppColors.rejected, shape: BoxShape.circle),
         child: const Icon(Icons.close, color: Colors.black, size: 12.0),
       );
     }
     if (isAnalyzed) {
       return Container(
         padding: const EdgeInsets.all(4.0),
-        decoration: const BoxDecoration(color: AppColors.analyzed, shape: BoxShape.circle),
-        child: const Icon(Icons.radar_outlined, color: Colors.black, size: 12.0),
+        decoration: const BoxDecoration(
+            color: AppColors.analyzed, shape: BoxShape.circle),
+        child:
+            const Icon(Icons.radar_outlined, color: Colors.black, size: 12.0),
       );
     }
     return const SizedBox.shrink();

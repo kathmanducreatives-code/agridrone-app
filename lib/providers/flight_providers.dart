@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/flight_capture.dart';
 import '../models/flight_summary.dart';
 import '../models/detection.dart';
+import '../services/ai_assistant_service.dart';
 import '../services/huggingface_service.dart';
 import '../services/supabase_service.dart';
 import 'realtime_providers.dart';
@@ -19,13 +20,18 @@ final huggingFaceServiceProvider = Provider<HuggingFaceService>((ref) {
   return HuggingFaceService();
 });
 
+/// Provider exposing Claude/Anthropic reasoning endpoints through FastAPI.
+final aiAssistantServiceProvider = Provider<AiAssistantService>((ref) {
+  return AiAssistantService();
+});
+
 // ── Flight summary providers ───────────────────────────────
 
 /// FutureProvider supplying aggregated summaries for all drone flights.
 final allFlightsProvider = FutureProvider<List<FlightSummary>>((ref) async {
   final service = ref.watch(supabaseServiceProvider);
   final realtime = ref.watch(realtimeServiceProvider);
-  
+
   final sub1 = realtime.captureInserts.listen((_) => ref.invalidateSelf());
   final sub2 = realtime.captureUpdates.listen((_) => ref.invalidateSelf());
   ref.onDispose(() {
@@ -40,7 +46,7 @@ final allFlightsProvider = FutureProvider<List<FlightSummary>>((ref) async {
 final latestFlightSummaryProvider = FutureProvider<FlightSummary?>((ref) async {
   final service = ref.watch(supabaseServiceProvider);
   final realtime = ref.watch(realtimeServiceProvider);
-  
+
   final sub1 = realtime.captureInserts.listen((_) => ref.invalidateSelf());
   final sub2 = realtime.captureUpdates.listen((_) => ref.invalidateSelf());
   ref.onDispose(() {
@@ -54,7 +60,8 @@ final latestFlightSummaryProvider = FutureProvider<FlightSummary?>((ref) async {
 // ── Captures list providers ────────────────────────────────
 
 /// Family FutureProvider to query captures for a specific flight, listening to updates.
-final flightCapturesProvider = FutureProvider.family<List<FlightCapture>, int>((ref, flightId) async {
+final flightCapturesProvider =
+    FutureProvider.family<List<FlightCapture>, int>((ref, flightId) async {
   final service = ref.watch(supabaseServiceProvider);
   final realtime = ref.watch(realtimeServiceProvider);
 
@@ -78,13 +85,14 @@ final flightCapturesProvider = FutureProvider.family<List<FlightCapture>, int>((
 });
 
 /// FutureProvider supplying all captures across all missions.
-final allFlightCapturesProvider = FutureProvider<List<FlightCapture>>((ref) async {
+final allFlightCapturesProvider =
+    FutureProvider<List<FlightCapture>>((ref) async {
   final service = ref.watch(supabaseServiceProvider);
   final realtime = ref.watch(realtimeServiceProvider);
 
   final sub1 = realtime.captureInserts.listen((_) => ref.invalidateSelf());
   final sub2 = realtime.captureUpdates.listen((_) => ref.invalidateSelf());
-  
+
   ref.onDispose(() {
     sub1.cancel();
     sub2.cancel();
@@ -96,7 +104,8 @@ final allFlightCapturesProvider = FutureProvider<List<FlightCapture>>((ref) asyn
 // ── Detections list providers ──────────────────────────────
 
 /// Family FutureProvider to fetch disease detections recorded during a flight.
-final detectionsForFlightProvider = FutureProvider.family<List<Detection>, int>((ref, flightId) async {
+final detectionsForFlightProvider =
+    FutureProvider.family<List<Detection>, int>((ref, flightId) async {
   final service = ref.watch(supabaseServiceProvider);
   final realtime = ref.watch(realtimeServiceProvider);
 
@@ -132,7 +141,10 @@ class LiveDetectionsNotifier extends Notifier<List<Detection>> {
     final realtime = ref.watch(realtimeServiceProvider);
 
     // Initial load from standard database view query
-    ref.read(supabaseServiceProvider).getRecentDetections(limit: 50).then((initialList) {
+    ref
+        .read(supabaseServiceProvider)
+        .getRecentDetections(limit: 50)
+        .then((initialList) {
       state = initialList;
     });
 
@@ -161,7 +173,8 @@ class LiveDetectionsNotifier extends Notifier<List<Detection>> {
 }
 
 /// Provider for the live streaming list of detections.
-final liveDetectionsProvider = NotifierProvider<LiveDetectionsNotifier, List<Detection>>(
+final liveDetectionsProvider =
+    NotifierProvider<LiveDetectionsNotifier, List<Detection>>(
   LiveDetectionsNotifier.new,
 );
 

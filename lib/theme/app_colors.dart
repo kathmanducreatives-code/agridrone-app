@@ -1,47 +1,52 @@
 import 'package:flutter/material.dart';
 
-/// Central dark cyber-agri design system color tokens.
+/// Central white/green agtech SaaS design system color tokens.
 class AppColors {
   AppColors._();
 
   // Backgrounds
-  static const Color bg          = Color(0xFF000000);   // pitch black
-  static const Color surface     = Color(0xFF0A0F0A);   // near black
-  static const Color surface2    = Color(0xFF0D130D);
-  static const Color glass       = Color.fromRGBO(15, 25, 18, 0.42);
-  static const Color glassHi     = Color.fromRGBO(20, 35, 25, 0.62);
+  static const Color bg = Color(0xFFF7FBF6);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surface2 = Color(0xFFEFF7EF);
+  static const Color glass = Color.fromRGBO(255, 255, 255, 0.72);
+  static const Color glassHi = Color.fromRGBO(255, 255, 255, 0.88);
 
   // Lines & dividers
-  static const Color line        = Color.fromRGBO(0, 255, 136, 0.10);
-  static const Color line2       = Color.fromRGBO(0, 255, 136, 0.20);
-  static const Color lineBright  = Color.fromRGBO(0, 255, 136, 0.45);
+  static const Color line = Color.fromRGBO(20, 83, 45, 0.12);
+  static const Color line2 = Color.fromRGBO(20, 83, 45, 0.20);
+  static const Color lineBright = Color.fromRGBO(22, 163, 74, 0.35);
 
   // Brand
-  static const Color green       = Color(0xFF00FF88);   // Neon Green
-  static const Color greenSoft   = Color(0xFF00D4AA);
-  static const Color greenLime   = Color(0xFFAAFF00);
-  static const Color greenDeep   = Color(0xFF007A40);
+  static const Color green = Color(0xFF16A34A);
+  static const Color greenSoft = Color(0xFF10B981);
+  static const Color greenLime = Color(0xFFA3E635);
+  static const Color greenDeep = Color(0xFF14532D);
+  static const Color teal = Color(0xFF14B8A6);
 
   // Text
-  static const Color text        = Color(0xFFE7F5E9);
-  static const Color textDim     = Color(0xFF8AA896);
-  static const Color textFaint   = Color(0xFF557066);
+  static const Color text = Color(0xFF17231B);
+  static const Color textDim = Color(0xFF66736B);
+  static const Color textFaint = Color(0xFF93A39A);
 
   // Status
-  static const Color warn        = Color(0xFFFFB547);
-  static const Color crit        = Color(0xFFFF5577);
-  static const Color info        = Color(0xFF5AD7FF);
+  static const Color warn = Color(0xFFF59E0B);
+  static const Color crit = Color(0xFFDC2626);
+  static const Color info = Color(0xFF0EA5E9);
+  static const Color unknown = Color(0xFF94A3B8);
 
   // Curation States
-  static const Color selected    = Color(0xFFFFD700);   // gold border
-  static const Color rejected    = Color(0xFFFF5577);   // red dim
-  static const Color analyzed    = Color(0xFF00FF88);   // green check
+  static const Color selected = Color(0xFFF59E0B);
+  static const Color rejected = Color(0xFFDC2626);
+  static const Color analyzed = Color(0xFF16A34A);
 
   // Disease class colors
   static const Map<String, Color> diseaseColors = {
-    'Rice_Blast':        Color(0xFFFF5577),
-    'Brown_Spot':        Color(0xFFFFB547),
-    'Narrow_Brown_Spot': Color(0xFFFFD700),
-    'Dirty_Panicle':     Color(0xFF5AD7FF),
+    'Rice_Blast': Color(0xFFDC2626),
+    'Brown_Spot': Color(0xFFF59E0B),
+    'Narrow_Brown_Spot': Color(0xFFD97706),
+    'Dirty_Panicle': Color(0xFF0EA5E9),
+    'Brown Spot Disease': Color(0xFFF59E0B),
+    'Rice Blast Disease': Color(0xFFDC2626),
+    'Rice_Brown_spot': Color(0xFFF59E0B),
   };
 }

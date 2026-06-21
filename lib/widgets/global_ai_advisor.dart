@@ -21,37 +21,9 @@ class GlobalAiAdvisorModal extends ConsumerWidget {
     final state = ref.watch(globalAiAdvisorProvider);
     if (!state.isOpen) return const SizedBox.shrink();
 
-    final isMobile = MediaQuery.sizeOf(context).width < 760;
-
-    return Stack(
-      children: [
-        // Dark blurred backdrop barrier
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: () => ref.read(globalAiAdvisorProvider.notifier).close(),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: Container(
-                color: Colors.black.withAlpha(90),
-              ),
-            ),
-          ),
-        ),
-        // Chat Dialog Content
-        if (isMobile)
-          const Positioned.fill(
-            child: GlobalAiAdvisorDrawer(fullScreen: true),
-          )
-        else
-          Center(
-            child: Container(
-              width: 580,
-              height: MediaQuery.sizeOf(context).height * 0.85,
-              constraints: const BoxConstraints(maxHeight: 780),
-              child: const GlobalAiAdvisorDrawer(fullScreen: false),
-            ),
-          ),
-      ],
+    // The AI Advisor chat now opens as a full-screen workspace on every device.
+    return const Positioned.fill(
+      child: GlobalAiAdvisorDrawer(fullScreen: true),
     );
   }
 }
@@ -218,73 +190,114 @@ class _GlobalAiAdvisorDrawerState extends ConsumerState<GlobalAiAdvisorDrawer> {
       ...state.followUpQuestions,
     ].take(8).toList();
 
-    final content = ClipRRect(
-      borderRadius: BorderRadius.circular(widget.fullScreen ? 0 : 30),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(236),
-            borderRadius: BorderRadius.circular(widget.fullScreen ? 0 : 30),
-            border: Border.all(color: AppColors.green.withAlpha(55)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF14532D).withAlpha(28),
-                blurRadius: 34,
-                offset: const Offset(0, 18),
+    // Centre the chat content at a readable width on wide screens. Using
+    // horizontal Padding (not Center/ConstrainedBox) keeps the height
+    // constraint tight, so the inner Expanded(ListView) stays bounded.
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final hPad = screenWidth > 960 ? (screenWidth - 900) / 2 : 16.0;
+
+    final chatBody = Column(
+      children: [
+        Expanded(
+          child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(2, 12, 2, 18),
+            children: [
+              AiContextCard(appContext: appContext),
+              const SizedBox(height: 14),
+              if (state.messages.isEmpty) ...[
+                const _ChatWelcomeCard(),
+              ] else ...[
+                AiChatMessageList(messages: state.messages),
+              ],
+              if (state.isLoading) ...[
+                const SizedBox(height: 10),
+                const _AdvisorLoading(),
+              ],
+              if (state.errorMessage != null) ...[
+                const SizedBox(height: 10),
+                _AdvisorError(message: state.errorMessage!),
+              ],
+              if (state.suggestedActions.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _SuggestedActions(actions: state.suggestedActions),
+              ],
+              const SizedBox(height: 12),
+              AiPromptChips(
+                prompts: prompts,
+                onSelected: _send,
               ),
             ],
           ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                _AdvisorHeader(fullScreen: widget.fullScreen),
-                Expanded(
-                  child: ListView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
-                    children: [
-                      AiContextCard(appContext: appContext),
-                      const SizedBox(height: 14),
-                      if (state.messages.isEmpty) ...[
-                        const _ChatWelcomeCard(),
-                      ] else ...[
-                        AiChatMessageList(messages: state.messages),
-                      ],
-                      if (state.isLoading) ...[
-                        const SizedBox(height: 10),
-                        const _AdvisorLoading(),
-                      ],
-                      if (state.errorMessage != null) ...[
-                        const SizedBox(height: 10),
-                        _AdvisorError(message: state.errorMessage!),
-                      ],
-                      if (state.suggestedActions.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        _SuggestedActions(actions: state.suggestedActions),
-                      ],
-                      const SizedBox(height: 12),
-                      AiPromptChips(
-                        prompts: prompts,
-                        onSelected: _send,
-                      ),
-                    ],
-                  ),
-                ),
-                _AdvisorInput(
-                  controller: _controller,
-                  enabled: !state.isLoading,
-                  onSend: _send,
-                ),
-              ],
+        ),
+        _AdvisorInput(
+          controller: _controller,
+          enabled: !state.isLoading,
+          onSend: _send,
+        ),
+      ],
+    );
+
+    final fullScreenContent = Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFF7FBF6),
+            Color(0xFFFFFFFF),
+            Color(0xFFEFF8EF),
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: hPad),
+              child: const _AdvisorHeader(fullScreen: true),
+            ),
+            const Divider(height: 1, color: AppColors.line),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: hPad),
+                child: chatBody,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (widget.fullScreen) {
+      return Material(color: Colors.transparent, child: fullScreenContent);
+    }
+
+    // Compact boxed fallback (no longer used by the modal, kept for safety).
+    return Material(
+      color: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(236),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: AppColors.green.withAlpha(55)),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  const _AdvisorHeader(fullScreen: false),
+                  Expanded(child: chatBody),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
-
-    if (widget.fullScreen) return content;
-    return Material(color: Colors.transparent, child: content);
   }
 }
 

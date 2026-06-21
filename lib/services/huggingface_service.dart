@@ -60,6 +60,24 @@ class HuggingFaceService {
         fallbackContext: 'Image Analysis failed');
   }
 
+  /// Runs Image Analysis on any crop image URL (no flight capture context).
+  /// Returns the detections; results are display-only (not persisted).
+  Future<Map<String, dynamic>> predictByUrl(String imageUrl) async {
+    final imageUrlError = _validateImageUrl(imageUrl);
+    if (imageUrlError != null) {
+      throw HuggingFaceException(imageUrlError, code: 'invalid_image_url');
+    }
+    final response = await _postPredict({
+      'image_url': imageUrl,
+      'image_id': 'campaign-${DateTime.now().millisecondsSinceEpoch}',
+    });
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw _exceptionFromResponse(response,
+        fallbackContext: 'Image Analysis failed');
+  }
+
   /// Sends a test upload analysis prediction request to FastAPI, persisting detections in test tables.
   Future<Map<String, dynamic>> predictForTestUpload({
     required String imageUrl,

@@ -326,6 +326,50 @@ class SupabaseService {
     });
   }
 
+  /// Uploads a crop photo from the user's device to storage and links it to a
+  /// manual campaign (no flight capture). Returns the created campaign_images row.
+  Future<Map<String, dynamic>> addDeviceImageToCampaign({
+    required String campaignId,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final rawExt =
+        filename.contains('.') ? filename.split('.').last.toLowerCase() : 'jpg';
+    final ext = const {'png', 'jpg', 'jpeg', 'webp'}.contains(rawExt)
+        ? (rawExt == 'jpeg' ? 'jpg' : rawExt)
+        : 'jpg';
+    final unique =
+        '${DateTime.now().microsecondsSinceEpoch}_${bytes.length}';
+    // The drone-images bucket only allows anon writes under the `test-uploads/`
+    // prefix; the campaign link is stored in the campaign_images row, not the
+    // storage path, so this is purely where the file bytes live.
+    final storagePath = 'test-uploads/campaign_${campaignId}_$unique.$ext';
+
+    await _client.storage.from('drone-images').uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: FileOptions(
+            contentType: ext == 'png'
+                ? 'image/png'
+                : (ext == 'webp' ? 'image/webp' : 'image/jpeg'),
+            upsert: false,
+          ),
+        );
+    final url = _client.storage.from('drone-images').getPublicUrl(storagePath);
+
+    final res = await _client
+        .from('campaign_images')
+        .insert({
+          'campaign_id': campaignId,
+          'image_url': url,
+          'image_path': storagePath,
+          'added_source': 'manual_upload',
+        })
+        .select()
+        .single();
+    return res;
+  }
+
   /// Removes an image from a campaign without deleting the original capture
   /// (soft delete via removed_at).
   Future<void> removeCampaignImage(String campaignImageId) async {

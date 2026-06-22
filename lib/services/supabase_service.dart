@@ -370,6 +370,21 @@ class SupabaseService {
     return res;
   }
 
+  /// Saves the Image Analysis result onto a campaign image (requires migration
+  /// 0003). Best-effort: silently ignored if the column does not exist yet.
+  Future<void> saveCampaignImageAnalysis({
+    required String campaignImageId,
+    required Map<String, dynamic> analysis,
+  }) async {
+    try {
+      await _client
+          .from('campaign_images')
+          .update({'analysis_json': analysis}).eq('id', campaignImageId);
+    } catch (e) {
+      debugPrint('[AgriDrone] Could not persist image analysis (run 0003?): $e');
+    }
+  }
+
   /// Removes an image from a campaign without deleting the original capture
   /// (soft delete via removed_at).
   Future<void> removeCampaignImage(String campaignImageId) async {

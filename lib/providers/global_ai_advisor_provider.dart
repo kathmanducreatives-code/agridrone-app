@@ -45,6 +45,10 @@ class GlobalAiAdvisorState {
   final Map<String, dynamic>? selectedCampaign;
   final Map<String, dynamic>? selectedFlight;
 
+  /// Rich campaign context (campaign_images, summary_stats, weather/soil/field/
+  /// report contexts) merged into app_context when a campaign is open.
+  final Map<String, dynamic>? campaignExtras;
+
   const GlobalAiAdvisorState({
     required this.isOpen,
     required this.isLoading,
@@ -58,6 +62,7 @@ class GlobalAiAdvisorState {
     this.pageOverride,
     this.selectedCampaign,
     this.selectedFlight,
+    this.campaignExtras,
   });
 
   factory GlobalAiAdvisorState.initial() {
@@ -90,6 +95,7 @@ class GlobalAiAdvisorState {
     Object? pageOverride = _sentinel,
     Object? selectedCampaign = _sentinel,
     Object? selectedFlight = _sentinel,
+    Object? campaignExtras = _sentinel,
   }) {
     return GlobalAiAdvisorState(
       isOpen: isOpen ?? this.isOpen,
@@ -118,6 +124,9 @@ class GlobalAiAdvisorState {
       selectedFlight: selectedFlight == _sentinel
           ? this.selectedFlight
           : selectedFlight as Map<String, dynamic>?,
+      campaignExtras: campaignExtras == _sentinel
+          ? this.campaignExtras
+          : campaignExtras as Map<String, dynamic>?,
     );
   }
 }
@@ -179,11 +188,13 @@ class GlobalAiAdvisorNotifier extends Notifier<GlobalAiAdvisorState> {
   void setCampaignContext({
     required Map<String, dynamic> campaign,
     Map<String, dynamic>? flight,
+    Map<String, dynamic>? extras,
     String pageOverride = 'Campaign Detail',
   }) {
     state = state.copyWith(
       selectedCampaign: campaign,
       selectedFlight: flight,
+      campaignExtras: extras,
       pageOverride: pageOverride,
     );
   }
@@ -192,6 +203,7 @@ class GlobalAiAdvisorNotifier extends Notifier<GlobalAiAdvisorState> {
     state = state.copyWith(
       selectedCampaign: null,
       selectedFlight: null,
+      campaignExtras: null,
       pageOverride: null,
     );
   }
@@ -323,6 +335,15 @@ final aiAdvisorAppContextProvider = Provider<Map<String, dynamic>>((ref) {
     };
   }
 
+  // Rich campaign context (real per-image analysis + supplemental env). These
+  // override the empty defaults so the AI Advisor answers from the open campaign.
+  final extras = advisorState.campaignExtras;
+  if (extras != null) {
+    extras.forEach((key, value) {
+      if (value != null) context[key] = value;
+    });
+  }
+
   return _removeNulls(context);
 });
 
@@ -361,10 +382,13 @@ List<String> aiAdvisorPromptsForPage(String page) {
     case 'Campaign Detail':
       return const [
         'Summarize this campaign',
-        'Which image needs attention?',
-        'Generate a campaign report',
+        'What disease was detected?',
+        'Does my crop need water?',
         'What should I do today?',
-        'What data is missing from this campaign?',
+        'Where should I inspect first?',
+        'Generate a crop report',
+        'Explain this project to judges',
+        'What data is missing?',
       ];
     case 'Check Crop':
       return const [

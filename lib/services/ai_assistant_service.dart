@@ -8,7 +8,7 @@ import '../models/ai_assistant.dart';
 
 class AiAssistantService {
   static const Duration _healthTimeout = Duration(seconds: 12);
-  static const Duration _aiTimeout = Duration(seconds: 70);
+  static const Duration _aiTimeout = Duration(seconds: 90);
 
   Future<Map<String, dynamic>> health() async {
     try {

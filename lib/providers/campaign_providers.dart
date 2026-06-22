@@ -135,3 +135,21 @@ final selectedFlightCampaignProvider =
     NotifierProvider<SelectedCampaignNotifier, CampaignView?>(
   SelectedCampaignNotifier.new,
 );
+
+/// In-session Image Analysis results keyed by campaign-image id. Lets uploaded
+/// photos show their detected diseases immediately after analysis, even before
+/// the analysis_json column (migration 0003) is applied / re-fetched.
+class CampaignImageAnalysisNotifier
+    extends Notifier<Map<String, Map<String, dynamic>>> {
+  @override
+  Map<String, Map<String, dynamic>> build() => const {};
+
+  void set(String imageId, Map<String, dynamic> result) {
+    state = {...state, imageId: result};
+  }
+}
+
+final campaignImageAnalysisProvider = NotifierProvider<
+    CampaignImageAnalysisNotifier, Map<String, Map<String, dynamic>>>(
+  CampaignImageAnalysisNotifier.new,
+);

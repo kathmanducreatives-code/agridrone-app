@@ -23,6 +23,73 @@ String _severityFromConfidence(double c) {
   return 'low';
 }
 
+/// Builds a polished, campaign-wide Crop Health Report from the campaign's real
+/// persisted Image Analysis results + supplemental field context, via the AI
+/// Advisor chat (server-side). Used for manual campaigns.
+Future<CropReport> _generateCampaignReportFromContext(
+  WidgetRef ref,
+  CampaignView campaign,
+) async {
+  final title = 'Crop Campaign Report — ${campaign.name}';
+  final instruction =
+      'Generate a complete, polished Crop Health Report for this campaign as '
+      'clean GitHub-flavored Markdown. Start with a level-1 title exactly: '
+      '"$title". Then use "##" section headings in this order: Campaign Overview, '
+      'Campaign Summary, Crop Images Reviewed, Image Analysis Findings, '
+      'Soil Moisture & Current Condition, Field Map / GPS Context, Risk Level, '
+      'Farmer Recommendations, Action Plan, Missing Data, Safety Note. '
+      'Use ONLY the real values from the context (real disease findings, '
+      'confidence, severity, counts, and the supplemental field values). Do not '
+      'invent diseases or sensor readings. List anything unavailable under '
+      'Missing Data. Give practical farmer steps; for chemical treatment, advise '
+      'following the product label and a local agriculture expert (no exact '
+      'pesticide dosages). Keep it farmer-friendly.';
+
+  final resp = await ref.read(aiAssistantServiceProvider).chat(
+        message: instruction,
+        appContext: campaign.fullAiContext,
+      );
+
+  final markdown = resp.answer.trim().isEmpty
+      ? '# $title\n\n_The report could not be generated. Please try again._'
+      : resp.answer;
+
+  final reportJson = <String, dynamic>{
+    'campaign_name': campaign.name,
+    'crop_type': campaign.cropType,
+    'source': campaign.source,
+    'image_count': campaign.imageCount,
+    'analyzed_count': campaign.analyzedCount,
+    'disease_count': campaign.diseaseCount,
+    if (campaign.summaryStats != null) 'summary_stats': campaign.summaryStats,
+    if (campaign.env != null) 'env': campaign.env,
+  };
+
+  try {
+    final row = await ref.read(supabaseServiceProvider).saveReport(
+          reportType: 'campaign',
+          title: title,
+          reportMarkdown: markdown,
+          reportJson: reportJson,
+          campaignId: campaign.manualId,
+          flightId: null,
+        );
+    ref.invalidate(reportsProvider);
+    return CropReport.fromRow(row);
+  } catch (_) {
+    return CropReport(
+      id: 'unsaved',
+      reportType: 'campaign',
+      title: title,
+      reportMarkdown: markdown,
+      reportJson: reportJson,
+      campaignId: campaign.manualId,
+      flightId: null,
+      createdAt: DateTime.now(),
+    );
+  }
+}
+
 /// Generates a real crop report for a campaign via the backend AI Advisor
 /// (`/ai/report`, server-side Claude) using only real diagnosis data, then
 /// persists it to the reports table.
@@ -34,6 +101,13 @@ Future<CropReport> generateCampaignReport(
   required CampaignView campaign,
   required List<Detection> detections,
 }) async {
+  // Manual campaigns with persisted Image Analysis (and supplemental field
+  // context) get a richer, campaign-wide report generated from the full real
+  // context via the AI Advisor, instead of a single-detection report.
+  if (!campaign.isDroneFlight && campaign.supplemental != null) {
+    return _generateCampaignReportFromContext(ref, campaign);
+  }
+
   Detection? top;
   if (detections.isNotEmpty) {
     top = detections.reduce((a, b) => a.confidence >= b.confidence ? a : b);

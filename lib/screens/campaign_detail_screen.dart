@@ -42,6 +42,7 @@ class _CampaignDetailViewState extends ConsumerState<CampaignDetailView> {
       ref.read(globalAiAdvisorProvider.notifier).setCampaignContext(
             campaign: widget.campaign.toAdvisorCampaign(),
             flight: widget.campaign.toAdvisorFlight(),
+            extras: widget.campaign.fullAiExtras,
           );
     });
   }
@@ -151,13 +152,14 @@ class _CampaignDetailViewState extends ConsumerState<CampaignDetailView> {
                 gpsKnown: campaign.isDroneFlight ? geotagged.hasValue : true,
                 isManual: isManual,
               ),
+              if (campaign.env != null) ...[
+                const SizedBox(height: 14),
+                _EnvContextCards(env: campaign.env!),
+              ],
               const SizedBox(height: 18),
               _AnalyzeImagesBar(
                 captures: capturesAsync.asData?.value ?? const [],
-                uploadedUrls: [
-                  for (final r in uploadedRows)
-                    if (r['image_url'] != null) r['image_url'] as String,
-                ],
+                uploadedRows: uploadedRows,
                 onChanged: _refresh,
               ),
               const SizedBox(height: 18),
@@ -226,6 +228,7 @@ class _CampaignDetailViewState extends ConsumerState<CampaignDetailView> {
                         const SizedBox(height: 10),
                         _UploadedImagesGrid(
                           rows: uploadedRows,
+                          persistedAnalysis: campaign.imageAnalysis,
                           onRemoved: _refresh,
                         ),
                       ],
@@ -594,12 +597,12 @@ class _ModeToggle extends StatelessWidget {
 /// results.
 class _AnalyzeImagesBar extends ConsumerStatefulWidget {
   final List<FlightCapture> captures;
-  final List<String> uploadedUrls;
+  final List<Map<String, dynamic>> uploadedRows;
   final VoidCallback onChanged;
 
   const _AnalyzeImagesBar({
     required this.captures,
-    required this.uploadedUrls,
+    required this.uploadedRows,
     required this.onChanged,
   });
 
@@ -621,31 +624,24 @@ class _AnalyzeImagesBarState extends ConsumerState<_AnalyzeImagesBar> {
   int _done = 0;
   int _total = 0;
 
-  int get _imageCount => widget.captures.length + widget.uploadedUrls.length;
+  int get _imageCount => widget.captures.length + widget.uploadedRows.length;
 
   bool _isDisease(String label) =>
       !_healthy.contains(label.toLowerCase().trim().replaceAll(' ', '_'));
 
-  void _collect(Map<String, dynamic> res, Map<String, int> diseases) {
+  /// Pretty disease labels found in a predict result (excludes healthy labels).
+  List<String> _diseaseLabels(Map<String, dynamic> res) {
     final dets = (res['detections'] as List?) ?? const [];
-    var hasDisease = false;
+    final out = <String>[];
     for (final d in dets) {
       if (d is! Map) continue;
       final label = (d['label'] ?? d['name'] ?? '').toString();
       if (label.isEmpty || !_isDisease(label)) continue;
-      hasDisease = true;
       final pretty = label.replaceAll('_', ' ');
-      diseases[pretty] = (diseases[pretty] ?? 0) + 1;
+      if (!out.contains(pretty)) out.add(pretty);
     }
-    if (hasDisease) {
-      _withDisease++;
-    } else {
-      _clear++;
-    }
+    return out;
   }
-
-  int _clear = 0;
-  int _withDisease = 0;
 
   Future<void> _analyzeAll() async {
     if (_imageCount == 0) {
@@ -654,17 +650,24 @@ class _AnalyzeImagesBarState extends ConsumerState<_AnalyzeImagesBar> {
     }
     final hf = ref.read(huggingFaceServiceProvider);
     final supa = ref.read(supabaseServiceProvider);
-    final diseases = <String, int>{};
+    final agg = <String, int>{};
     var analyzed = 0;
     var failed = 0;
-    _clear = 0;
-    _withDisease = 0;
+    var withDisease = 0;
 
     setState(() {
       _running = true;
       _done = 0;
       _total = _imageCount;
     });
+
+    void tally(List<String> diseases) {
+      analyzed++;
+      if (diseases.isNotEmpty) withDisease++;
+      for (final d in diseases) {
+        agg[d] = (agg[d] ?? 0) + 1;
+      }
+    }
 
     for (final cap in widget.captures) {
       final url = cap.imageUrl ?? '';
@@ -681,8 +684,7 @@ class _AnalyzeImagesBarState extends ConsumerState<_AnalyzeImagesBar> {
             flightId: cap.flightId,
             imageIndex: cap.imageIndex,
           );
-          _collect(res, diseases);
-          analyzed++;
+          tally(_diseaseLabels(res));
         } catch (_) {
           failed++;
         }
@@ -690,13 +692,31 @@ class _AnalyzeImagesBarState extends ConsumerState<_AnalyzeImagesBar> {
       if (mounted) setState(() => _done++);
     }
 
-    for (final url in widget.uploadedUrls) {
-      try {
-        final res = await hf.predictByUrl(url);
-        _collect(res, diseases);
-        analyzed++;
-      } catch (_) {
+    // Device-uploaded photos: store + persist each result so detected diseases
+    // show under the photo and are saved.
+    for (final row in widget.uploadedRows) {
+      final id = row['id'] as String?;
+      final url = (row['image_url'] as String?) ?? '';
+      if (id == null || url.isEmpty) {
         failed++;
+      } else {
+        try {
+          final res = await hf.predictByUrl(url);
+          final diseases = _diseaseLabels(res);
+          final result = <String, dynamic>{
+            'analyzed': true,
+            'has_disease': diseases.isNotEmpty,
+            'diseases': diseases,
+            'detection_count': diseases.length,
+            'analyzed_at': DateTime.now().toUtc().toIso8601String(),
+          };
+          ref.read(campaignImageAnalysisProvider.notifier).set(id, result);
+          await supa.saveCampaignImageAnalysis(
+              campaignImageId: id, analysis: result);
+          tally(diseases);
+        } catch (_) {
+          failed++;
+        }
       }
       if (mounted) setState(() => _done++);
     }
@@ -704,92 +724,14 @@ class _AnalyzeImagesBarState extends ConsumerState<_AnalyzeImagesBar> {
     widget.onChanged();
     if (mounted) {
       setState(() => _running = false);
-      _showResult(analyzed, failed, diseases);
+      final clear = analyzed - withDisease;
+      final failNote = failed > 0 ? ' · $failed could not be analyzed' : '';
+      final msg = agg.isEmpty
+          ? 'Analysis complete — no diseases found in $analyzed image${analyzed == 1 ? '' : 's'}$failNote.'
+          : 'Analysis complete — ${agg.length} disease type${agg.length == 1 ? '' : 's'} found · '
+              '$withDisease with findings · $clear clear$failNote. See results under each photo.';
+      _toast(msg, agg.isEmpty ? AppColors.greenDeep : AppColors.warn);
     }
-  }
-
-  void _showResult(int analyzed, int failed, Map<String, int> diseases) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: Row(
-          children: [
-            Icon(
-              diseases.isEmpty
-                  ? Icons.verified_rounded
-                  : Icons.warning_amber_rounded,
-              color: diseases.isEmpty ? AppColors.green : AppColors.warn,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('Image Analysis complete',
-                  style:
-                      GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w900)),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Analyzed $analyzed image${analyzed == 1 ? '' : 's'}'
-              '${failed > 0 ? ' · $failed could not be analyzed' : ''}.',
-              style: GoogleFonts.spaceGrotesk(
-                  color: AppColors.textDim, fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-            if (diseases.isEmpty)
-              Text(
-                'No diseases detected — your crops look healthy. '
-                '$_clear image${_clear == 1 ? '' : 's'} checked clear.',
-                style: GoogleFonts.spaceGrotesk(
-                    color: AppColors.greenDeep,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    height: 1.4),
-              )
-            else ...[
-              Text('Diseases detected:',
-                  style: GoogleFonts.spaceGrotesk(
-                      fontWeight: FontWeight.w800, fontSize: 14)),
-              const SizedBox(height: 8),
-              ...diseases.entries.map((e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.coronavirus_rounded,
-                            size: 16, color: AppColors.crit),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${e.key} — ${e.value} finding${e.value == 1 ? '' : 's'}',
-                            style: GoogleFonts.spaceGrotesk(
-                                fontSize: 13.5, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
-              const SizedBox(height: 6),
-              Text(
-                '$_withDisease image${_withDisease == 1 ? '' : 's'} with findings · '
-                '$_clear clear.',
-                style: GoogleFonts.spaceGrotesk(
-                    color: AppColors.textDim, fontSize: 12.5),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close')),
-        ],
-      ),
-    );
   }
 
   void _toast(String msg, Color color) {
@@ -869,7 +811,14 @@ class _UploadedImagesGrid extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> rows;
   final VoidCallback onRemoved;
 
-  const _UploadedImagesGrid({required this.rows, required this.onRemoved});
+  /// Persisted per-image Image Analysis results keyed by campaign-image id.
+  final Map<String, dynamic> persistedAnalysis;
+
+  const _UploadedImagesGrid({
+    required this.rows,
+    required this.onRemoved,
+    this.persistedAnalysis = const {},
+  });
 
   @override
   ConsumerState<_UploadedImagesGrid> createState() =>
@@ -914,6 +863,7 @@ class _UploadedImagesGridState extends ConsumerState<_UploadedImagesGrid> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(campaignImageAnalysisProvider);
     return LayoutBuilder(
       builder: (context, constraints) {
         final cols = constraints.maxWidth >= 1100
@@ -929,88 +879,375 @@ class _UploadedImagesGridState extends ConsumerState<_UploadedImagesGrid> {
             crossAxisCount: cols,
             crossAxisSpacing: 14,
             mainAxisSpacing: 14,
-            childAspectRatio: 0.82,
+            mainAxisExtent: 250,
           ),
           itemBuilder: (context, i) {
             final row = widget.rows[i];
             final id = row['id'] as String;
             final url = (row['image_url'] as String?) ?? '';
             final removing = _removing.contains(id);
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Stack(
-                fit: StackFit.expand,
+
+            // Analysis result: prefer the persisted campaign analysis, then a
+            // saved row value, then the in-session result from the last run.
+            final persisted = widget.persistedAnalysis[id];
+            final analysis = (persisted is Map
+                    ? Map<String, dynamic>.from(persisted)
+                    : null) ??
+                (row['analysis_json'] is Map
+                    ? Map<String, dynamic>.from(row['analysis_json'] as Map)
+                    : null) ??
+                session[id];
+
+            return Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  CachedNetworkImage(
-                    imageUrl: url,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                      color: AppColors.surface2,
-                      child: const Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(18)),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              color: AppColors.surface2,
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                ),
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              color: AppColors.surface2,
+                              child: const Icon(Icons.broken_image_outlined,
+                                  color: AppColors.textFaint),
+                            ),
+                          ),
+                          Positioned(
+                            left: 8,
+                            top: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(120),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'Uploaded',
+                                style: GoogleFonts.spaceGrotesk(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: GestureDetector(
+                              onTap: removing ? null : () => _remove(id),
+                              child: const CircleAvatar(
+                                radius: 13,
+                                backgroundColor: Colors.black54,
+                                child: Icon(Icons.close_rounded,
+                                    size: 16, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                          if (removing)
+                            Container(
+                              color: Colors.black.withAlpha(90),
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2.5),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                    errorWidget: (_, __, ___) => Container(
-                      color: AppColors.surface2,
-                      child: const Icon(Icons.broken_image_outlined,
-                          color: AppColors.textFaint),
                     ),
                   ),
-                  Positioned(
-                    left: 8,
-                    top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(120),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        'Uploaded',
-                        style: GoogleFonts.spaceGrotesk(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: GestureDetector(
-                      onTap: removing ? null : () => _remove(id),
-                      child: const CircleAvatar(
-                        radius: 13,
-                        backgroundColor: Colors.black54,
-                        child: Icon(Icons.close_rounded,
-                            size: 16, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  if (removing)
-                    Container(
-                      color: Colors.black.withAlpha(90),
-                      child: const Center(
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2.5),
-                        ),
-                      ),
-                    ),
+                  _AnalysisResultStrip(analysis: analysis),
                 ],
               ),
             );
           },
         );
       },
+    );
+  }
+}
+
+/// The disease-result strip shown under an uploaded crop photo.
+class _AnalysisResultStrip extends StatelessWidget {
+  final Map<String, dynamic>? analysis;
+
+  const _AnalysisResultStrip({required this.analysis});
+
+  @override
+  Widget build(BuildContext context) {
+    final a = analysis;
+    if (a == null || a['analyzed'] != true) {
+      return _wrap(
+        icon: Icons.biotech_outlined,
+        color: AppColors.textFaint,
+        child: Text(
+          'Not analyzed yet',
+          style: GoogleFonts.spaceGrotesk(
+              color: AppColors.textDim,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+    final diseases = (a['diseases'] as List?)?.cast<dynamic>() ?? const [];
+    if (diseases.isEmpty) {
+      return _wrap(
+        icon: Icons.verified_rounded,
+        color: AppColors.green,
+        child: Text(
+          'No disease · Healthy',
+          style: GoogleFonts.spaceGrotesk(
+              color: AppColors.greenDeep,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800),
+        ),
+      );
+    }
+    // Confidence / severity meta (shown when persisted analysis carries them).
+    final conf = a['confidence'];
+    final sev = a['severity'];
+    final needsReview = a['needs_review'] == true;
+    final metaParts = <String>[
+      if (conf is num) '${(conf * 100).round()}% confidence',
+      if (sev is String && sev.isNotEmpty) '${sev[0].toUpperCase()}${sev.substring(1)} severity',
+    ];
+    final meta = needsReview
+        ? 'Low confidence · review'
+        : metaParts.join(' · ');
+    return _wrap(
+      icon: Icons.coronavirus_rounded,
+      color: needsReview ? AppColors.warn : AppColors.crit,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            diseases.join(', '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.spaceGrotesk(
+                color: needsReview ? AppColors.warn : AppColors.crit,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800),
+          ),
+          if (meta.isNotEmpty)
+            Text(
+              meta,
+              style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textDim,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _wrap(
+      {required IconData icon, required Color color, required Widget child}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+/// Environmental context cards (soil moisture, temperature/weather, GPS/zone).
+/// Values are supplemental field estimates when live sensors are unavailable.
+class _EnvContextCards extends StatelessWidget {
+  final Map<String, dynamic> env;
+
+  const _EnvContextCards({required this.env});
+
+  String? _str(dynamic v) => v?.toString();
+
+  @override
+  Widget build(BuildContext context) {
+    final soil = env['soil_moisture_pct'];
+    final temp = env['temperature_c'];
+    final weather = _str(env['weather_condition']);
+    final humidity = env['humidity_pct'];
+    final lat = env['gps_lat'];
+    final lng = env['gps_lng'];
+    final zone = _str(env['field_zone']);
+    final isSupplemental = env['source'] == 'supplemental';
+    final note = isSupplemental ? 'Estimated field value' : 'Live reading';
+
+    final cards = <Widget>[
+      _EnvCard(
+        icon: Icons.water_drop_rounded,
+        color: const Color(0xFF2F8FE0),
+        label: 'Soil Moisture',
+        value: soil != null ? '$soil%' : '—',
+        sub: soil != null ? _soilBand(soil) : 'Not recorded',
+        note: note,
+      ),
+      _EnvCard(
+        icon: Icons.thermostat_rounded,
+        color: AppColors.warn,
+        label: 'Temperature & Weather',
+        value: temp != null ? '$temp°C' : '—',
+        sub: [
+          if (weather != null) weather,
+          if (humidity != null) 'Humidity $humidity%',
+        ].join(' · '),
+        note: note,
+      ),
+      _EnvCard(
+        icon: Icons.place_rounded,
+        color: AppColors.green,
+        label: 'Field Location',
+        value: zone ?? 'Field',
+        sub: (lat != null && lng != null)
+            ? '$lat, $lng'
+            : 'Coordinates not available',
+        note: note,
+      ),
+    ];
+
+    return LayoutBuilder(builder: (context, c) {
+      if (c.maxWidth < 720) {
+        return Column(
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) const SizedBox(height: 10),
+              cards[i],
+            ],
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            Expanded(child: cards[i]),
+          ],
+        ],
+      );
+    });
+  }
+
+  static String _soilBand(dynamic pct) {
+    final v = (pct is num) ? pct.toDouble() : double.tryParse('$pct') ?? 0;
+    if (v < 25) return 'Dry — check irrigation';
+    if (v <= 45) return 'Adequate for rice';
+    if (v <= 60) return 'Moist';
+    return 'Very wet — watch drainage';
+  }
+}
+
+class _EnvCard extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+  final String sub;
+  final String note;
+
+  const _EnvCard({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.sub,
+    required this.note,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AgriGlassCard(
+      radius: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.spaceGrotesk(
+                    color: AppColors.textDim,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: GoogleFonts.spaceGrotesk(
+              color: AppColors.text,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          if (sub.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              sub,
+              style: GoogleFonts.spaceGrotesk(
+                color: AppColors.textDim,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.info_outline_rounded,
+                  size: 12, color: AppColors.textFaint),
+              const SizedBox(width: 4),
+              Text(
+                note,
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textFaint,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
